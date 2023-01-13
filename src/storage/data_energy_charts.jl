@@ -8,8 +8,8 @@ import PyPlot as plt
 plt.pygui(true)
 plt.pygui(:qt5)
 
-root = dirname(dirname(@__DIR__))
-get_data_ise_dir() = joinpath(root, "data_ise")
+sisremo_dir = dirname(dirname(@__DIR__))
+get_data_dir() = joinpath(sisremo_dir, "data")
 
 """
     download_ise_power_data(year)
@@ -21,10 +21,11 @@ function download_ise_power_data(year)
     url   = "https://api.energy-charts.info/power"
     resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
     b     = String(resp.body)
-    open(joinpath(get_data_ise_dir(), @sprintf("power_%s.json", year)), "w") do out
+    open(joinpath(get_data_dir(), @sprintf("power_%s.json", year)), "w") do out
         write(out, b)
     end
 end
+download_ise_power_data(2022)
 
 """
     download_ise_istalled_power_data()
@@ -36,7 +37,7 @@ function download_ise_istalled_power_data()
     url   = "https://api.energy-charts.info/installed_power"
     resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
     b     = String(resp.body)
-    open(joinpath(get_data_ise_dir(), "installed_power.json"), "w") do out
+    open(joinpath(get_data_dir(), "installed_power.json"), "w") do out
         write(out, b)
     end
 end
@@ -81,6 +82,7 @@ end
 function ise_json_to_hdf5(uts_key, ise_keys, data_root, datafiles, hdf5_path1, hdf5_path2)
     # number of columns
     nk = length(ise_keys)
+    datasets = []
     # destination of data
     D = Vector{Array{Float64,2}}(undef, 0)
 
@@ -99,7 +101,7 @@ function ise_json_to_hdf5(uts_key, ise_keys, data_root, datafiles, hdf5_path1, h
         M = Matrix{Float64}(undef, n, nk+1)
         # store Unix utstamps
         M[:,1] = d[uts_key]
-        # get data and sore in Matrix M
+        # get data and store in Matrix M
         for (i,k) in enumerate(ise_keys)
             if haskey(d, ise_keys[i])
                 V = d[ise_keys[i]]
@@ -112,9 +114,10 @@ function ise_json_to_hdf5(uts_key, ise_keys, data_root, datafiles, hdf5_path1, h
         end
         # push Matrix into Vector
         push!(D, M)
+        push!(datasets, split(splitext(df)[1], "_")[2])
     end
     # save al matrices in a single hdf5file
-    save_arrays_as_hdf5(hdf5_path1, D, group = "ise_power", datasets = array, script_dir=false, colm_to_rowm_p = true)
+    save_arrays_as_hdf5(hdf5_path1, D, group = "ise_power", datasets = datasets, script_dir=false, colm_to_rowm_p = true)
 
     # concatenate all matrices
     DD = reduce(vcat, D)
@@ -166,16 +169,17 @@ function run_ise_json_to_hdf5(download_json_p::Bool, start_year::Int64, end_year
 
     uts_key = "xAxisValues (Unix timestamp)"
     datafiles = [@sprintf("power_%d.json", y) for y in 2015:2022]
-    hdf5_path1 = joinpath(get_data_ise_dir(), "ise_power_all.hdf5")
-    hdf5_path2 = joinpath(get_data_ise_dir(), "ise_power_all_2015-2022.hdf5")
-    ise_json_to_hdf5(uts_key, ise_keys_all, get_data_ise_dir(), datafiles, hdf5_path1, hdf5_path2)
+    hdf5_path1 = joinpath(get_data_dir(), "ise_power_all.hdf5")
+    hdf5_path2 = joinpath(get_data_dir(), "ise_power_all_2015-2022.hdf5")
+    ise_json_to_hdf5(uts_key, ise_keys_all, get_data_dir(), datafiles, hdf5_path1, hdf5_path2)
 end
+run_ise_json_to_hdf5(false, 2015, 2024)
 
 """
     load ise energy charts data stored in hdf5 file
 """
 function load_ise_as_hdf5()
-    hdf5_path = joinpath(root, "data_ise", "ise_power_all_2015-2022.hdf5")
+    hdf5_path = joinpath(get_data_dir(), "ise_power_all_2015-2022.hdf5")
     load_array_as_hdf5(hdf5_path, group = "ise_power", dataset = "ise_power_2015-2022", script_dir=false, colm_to_rowm_p = true)
 end
 

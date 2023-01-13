@@ -8,8 +8,8 @@ include("storage/utils.jl")
 include("storage/hdf5_utils.jl")
 include("storage/data_energy.jl")
 
-root = dirname(@__DIR__)
-get_fig_dir(data_source) = joinpath(root, @sprintf("data_%s", data_source), "output", "fig")
+sisremo_root = dirname(@__DIR__)
+get_fig_dir() = joinpath(sisremo_root, "figures")
 
 
 """
@@ -26,17 +26,17 @@ function scale_and_detrend(Load::Vector{Float64}, RP::Vector{Float64})
 
     # detrend Load
     Load_trend = polynomial_fit(Load, k)
-    tL = @. Load_trend / Load_trend[nh]
-    Load_de = @. Load / tL
+    Load_de = @. Load * Load_trend[nh] / Load_trend
 
     scale = (mean(Load) / mean(RP))
-
-    # detrend RP
+    @infoe @sprintf("(mean(RP) / mean(Load)) = %3.2f", 1.0/scale)
+    # scale RP
     RP_sc = @. RP * scale
+
     RP_trend = polynomial_fit(RP_sc, k)
-    tE = @. RP_trend / RP_trend[nh]
-    RP_de = @. RP_sc / tE
-    # scale RP_de
+    RP_de = @. RP_sc * RP_trend[nh] / RP_trend
+
+    # scale RP_de using detrended data
     RP_de_sc = RP_de * mean(Load_de)/mean(RP_de)
 
     # diff between detrended RP and detrended Load
@@ -182,7 +182,7 @@ function plot_powers(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{
     pl.title("energy_charts data")
     pl.legend()
     if averaging_hours > 1
-        pl.title(@sprintf("averaged, %d hours window", averaging_hours))
+        pl.title(@sprintf("averaged, %d days window", div(averaging_hours,24)))
         pl.savefig(joinpath(fig_dir, @sprintf("RP_averaged.png")))
     else
         pl.savefig(joinpath(fig_dir, @sprintf("RP.png")))
@@ -250,7 +250,7 @@ function plot_detrended(dates::Vector{DateTime}, RP::Vector{Float64}, RP_de::Vec
 end
 
 function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64}, 
-    storage_fill_res, fig_dir::String, fig::Vector{Int64}, pngpath::String)
+    storage_fill_res, fig_dir::String, fig::Vector{Int64}, pngpath::String; data_are_averaged = false, plot_all_p = false)
 
     prozent = "%"
     pl.figure(fig[1]); fig[1] += 1
@@ -264,38 +264,40 @@ function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64},
     pl.grid()
     pl.savefig(joinpath(fig_dir, pngpath.*".png"))
 
-    for (storage_fill, inflow, outflow, Import, Export, o, s) in storage_fill_res
-        pl.figure(fig[1]); fig[1] += 1
-        pl.plot(dates, RP .*o ,   label="RP")
-        pl.plot(dates, Load,   label="Load")
-        pl.title(@sprintf("Load, RP, %2.f TWh, %3.f %s", s, (o-1.0)*100.0, prozent))
-        pl.legend()
-        pl.savefig(joinpath(fig_dir, @sprintf("1_%2.f_%3.f.png", s, (o-1.0)*100.0)))
+    if plot_all_p
+        for (storage_fill, inflow, outflow, Import, Export, o, s) in storage_fill_res
+            pl.figure(fig[1]); fig[1] += 1
+            pl.plot(dates, RP .*o ,   label="RP")
+            pl.plot(dates, Load,   label="Load")
+            pl.title(@sprintf("Load, RP, %2.f TWh, %3.f %s", s, (o-1.0)*100.0, prozent))
+            pl.legend()
+            pl.savefig(joinpath(fig_dir, @sprintf("1_%2.f_%3.f.png", s, (o-1.0)*100.0)))
 
-        pl.figure(fig[1]); fig[1] += 1
-        pl.plot(dates, inflow,   label="inflow")
-        pl.plot(dates, Load,   label="Load")
-        pl.title(@sprintf("Storage power inflow %2.f TWh, %3.f %s", s, (o-1.0)*100.0, prozent))
-        pl.legend()
-        pl.savefig(joinpath(fig_dir, @sprintf("2_%2.f_%3.f.png", s, (o-1.0)*100.0)))
+            pl.figure(fig[1]); fig[1] += 1
+            pl.plot(dates, inflow,   label="inflow")
+            pl.plot(dates, Load,   label="Load")
+            pl.title(@sprintf("Storage power inflow %2.f TWh, %3.f %s", s, (o-1.0)*100.0, prozent))
+            pl.legend()
+            pl.savefig(joinpath(fig_dir, @sprintf("2_%2.f_%3.f.png", s, (o-1.0)*100.0)))
 
-        pl.figure(fig[1]); fig[1] += 1
-        pl.plot(dates, outflow,  label="outflow")
-        pl.title(@sprintf("Storage power outflow %2.f TWh, %3.f %s", s, (o-1.0)*100.0, prozent))
-        pl.legend()
-        pl.savefig(joinpath(fig_dir, @sprintf("3_%2.f_%3.f.png", s, (o-1.0)*100.0)))
+            pl.figure(fig[1]); fig[1] += 1
+            pl.plot(dates, outflow,  label="outflow")
+            pl.title(@sprintf("Storage power outflow %2.f TWh, %3.f %s", s, (o-1.0)*100.0, prozent))
+            pl.legend()
+            pl.savefig(joinpath(fig_dir, @sprintf("3_%2.f_%3.f.png", s, (o-1.0)*100.0)))
 
-        pl.figure(fig[1]); fig[1] += 1
-        pl.plot(dates, Import, label="import")
-        pl.title(@sprintf("Power import %2.f TWh, %3.f %s", s, (o-1.0)*100.0, prozent))
-        pl.legend()
-        pl.savefig(joinpath(fig_dir, @sprintf("4_%2.f_%3.f.png", s, (o-1.0)*100.0)))
+            pl.figure(fig[1]); fig[1] += 1
+            pl.plot(dates, Import, label="import")
+            pl.title(@sprintf("Power import %2.f TWh, %3.f %s", s, (o-1.0)*100.0, prozent))
+            pl.legend()
+            pl.savefig(joinpath(fig_dir, @sprintf("4_%2.f_%3.f.png", s, (o-1.0)*100.0)))
 
-        pl.figure(fig[1]); fig[1] += 1
-        pl.plot(dates, Export, label="export")
-        pl.title(@sprintf("Power export %2.f TWh, %3.f %s", s, (o-1.0)*100.0, prozent))
-        pl.legend()
-        pl.savefig(joinpath(fig_dir, @sprintf("5_%2.f_%3.f.png", s, (o-1.0)*100.0)))
+            pl.figure(fig[1]); fig[1] += 1
+            pl.plot(dates, Export, label="export")
+            pl.title(@sprintf("Power export %2.f TWh, %3.f %s", s, (o-1.0)*100.0, prozent))
+            pl.legend()
+            pl.savefig(joinpath(fig_dir, @sprintf("5_%2.f_%3.f.png", s, (o-1.0)*100.0)))
+        end
     end
 end
 
@@ -303,7 +305,7 @@ end
     load data and compute and plot storage fille levels, original times (15 min)
 """
 function comp_and_plot(;plot_p = false)
-    fig_dir = get_fig_dir("ise")
+    fig_dir = get_fig_dir()
 
     # use GW
     eunit = ["MW", "GW", "TW"][2]
@@ -312,9 +314,6 @@ function comp_and_plot(;plot_p = false)
     # renewables is sum of wind onshore, wind offshore and solar
     RP = @. data.Woff + data.Won + data.Solar;
     dates = data.dates
-
-    @infoe data.uts[1], Dates.value(data.dates[1])/1000
-
 
     RP_de, RP_trend, ΔEL, Load_de, Load_trend = scale_and_detrend(Load, RP);
     storage_fill_res = compute_storage_fill_level(dates, Load_de, RP_de, eunit)
@@ -331,7 +330,7 @@ end
     load data and compute and plot storage fill levels, data are smoothed using moving averages
 """
 function comp_and_plot_averaged(;plot_p = false)
-    fig_dir = get_fig_dir("data_ise")
+    fig_dir = get_fig_dir()
 
     # use GW
     eunit = ["MW", "GW", "TW"][2]
@@ -345,14 +344,18 @@ function comp_and_plot_averaged(;plot_p = false)
     RP_av,   dates_av = averaging(RP,   dates, averaging_hours, method = "moving_average");
 
     RP_av_de, RP_av_trend, ΔEL_av, Load_av_de, Load_av_trend = scale_and_detrend(Load_av, RP_av);
-    storage_fill_res = compute_storage_fill_level(dates, Load_de, RP_de, eunit)
+    storage_fill_res = compute_storage_fill_level(dates, Load_av_de, RP_av_de, eunit)
 
     if plot_p
+        fig_dir = joinpath(fig_dir, "averaged")
+        mkpath(fig_dir)
         fig = [1]
         plot_powers(dates, Load_av, RP_av, averaging_hours, fig_dir, eunit, fig)
-        plot_detrended(dates, RP, RP_av_de, RP_av_trend, ΔEL_av, Load, Load_av_de, Load_av_trend, eunit, fig_dir, fig, data_are_averaged = true)
-        plot_storage_file_level(dates, Load_av_de, RP_av_de, storage_fill_res, fig_dir,"storage_file_av")
+        plot_detrended(dates, RP_av, RP_av_de, RP_av_trend, ΔEL_av, Load_av, Load_av_de, Load_av_trend, eunit, fig_dir, fig, data_are_averaged = true)
+        plot_storage_fill_level(dates, Load_av_de, RP_av_de, storage_fill_res, fig_dir, fig, "storage_file_av", data_are_averaged = true)
     end
 end
 
-comp_and_plot(plot_p=true);
+comp_and_plot(plot_p=true)
+
+comp_and_plot_averaged(plot_p=true);
