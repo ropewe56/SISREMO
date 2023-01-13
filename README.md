@@ -10,9 +10,10 @@ Simple Storage Reqirement Model for a 100% Renewable Energy System
 2. Parse downloaded json fiels and store date in a hdf5 file
 
 Data used in this model are:
-    1. Dates: UNIX timestamps are converted to Date objects
-    2. Load
-    3. Sum of Wind offshore, Wind onshore and Solar
+
+1. Dates: UNIX timestamps are converted to Date objects
+2. Load
+3. Sum of Wind offshore, Wind onshore and Solar
 
 ![RP](figures/RP.png)
 ## Detrend and Scale Date
