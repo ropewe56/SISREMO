@@ -121,5 +121,6 @@ Given storage capacity and an overproduction capacity factor the algorithm is:
     storage_fill = storage_fill .* Δh
     (storage_fill, inflow ./ M2, outflow ./ M2, Import ./ M2, Export ./ M2)
 
-Storage fill level over time for different combinations of storage capacity and renewable over production factor
+Storage fill level over time for different combinations of **storage capacity** and renewable overproduction factor **op**
+
 ![storage](figures/storage_fill.png)
