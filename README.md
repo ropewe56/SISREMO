@@ -3,11 +3,11 @@ Simple Storage Reqirement Model for a 100% Renewable Energy System
 
 There are many researches dedicated to 100% renewable energy system modelling and their models are much more sophisticated than the model presented here. Some publications in this field are:
 
-[1] T. M. Clack etal., Evaluation of a proposal for reliable low-cost grid power with 100% wind, water, and solar, Proc Natl Acad Sci USA, 14, 16, (2017), www.pnas.org/cgi/doi/10.1073/pnas.1610381114
-[2] Ziegler etal., Storage Requirements and Costs of Shaping Renewable Energy Toward Grid Decarbonization, Joule 3, 2134–2153 (2019), https://doi.org/10.1016/j.joule.2019.06.012
-[3] Ch. Breyer, etal., On the History and Future of 100% Renewable Energy Systems Research, IEEE Access, 10, (2022), DOI: 10.1109/ACCESS.2022.3193402
-[3] D. Bogdanov, Radical transformation pathway towards sustainable electricity via evolutionary steps, Nature Communications volume 10, Article number: 1077 (2019), https://www.nature.com/articles/s41467-019-08855-1
-[4] O. Ruhnau, O. Qvist, Storage requirements in a 100% renewable electricity system: extreme events and inter-annual variability, Environ. Res. Lett. 17 044018, (2022), DOI 10.1088/1748-9326/ac4dc8
+1. T. M. Clack etal., Evaluation of a proposal for reliable low-cost grid power with 100% wind, water, and solar, Proc Natl Acad Sci USA, 14, 16, (2017), www.pnas.org/cgi/doi/10.1073/pnas.1610381114
+2.  Ziegler etal., Storage Requirements and Costs of Shaping Renewable Energy Toward Grid Decarbonization, Joule 3, 2134–2153 (2019), https://doi.org/10.1016/j.joule.2019.06.012
+3.  Ch. Breyer, etal., On the History and Future of 100% Renewable Energy Systems Research, IEEE Access, 10, (2022), DOI: 10.1109/ACCESS.2022.3193402
+4.  D. Bogdanov, Radical transformation pathway towards sustainable electricity via evolutionary steps, Nature Communications volume 10, Article number: 1077 (2019), https://www.nature.com/articles/s41467-019-08855-1
+5.  O. Ruhnau, O. Qvist, Storage requirements in a 100% renewable electricity system: extreme events and inter-annual variability, Environ. Res. Lett. 17 044018, (2022), DOI 10.1088/1748-9326/ac4dc8
 
 The model described here is intended to show the relationships between energy production, energy consumption and storage requirements to clarify a little. It is easier to understand than the models described in the literature and anyone who is interested can play with the code themselves with a little [Julia](https://julialang.org/) programming experience.
 
@@ -96,9 +96,13 @@ The algorithm in shortm is:
 $\Delta P = R - L$
 
 if $\Delta P > 0$ and $S < S_{capacity}$
+
 $\quad S = S + \Delta P \Delta t$
+
 elseif $\Delta P < 0$ and $S > 0$
+
 $\quad S = S - \Delta P \Delta t$
+
 end
 
 Storage fill level over time for different combinations of **storage capacity** and renewable overproduction factor **op**
