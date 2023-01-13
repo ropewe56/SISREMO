@@ -1,16 +1,27 @@
 # SISREMO
 Simple Storage Reqirement Model for a 100% Renewable Energy System
 
-The model is implemented in [Julia](https://julialang.org/)
+There are many researches dedicated to 100% renewable energy system modelling and their models are much more sophisticated than the model presented here. Some publications in this field are:
+
+[1] T. M. Clack etal., Evaluation of a proposal for reliable low-cost grid power with 100% wind, water, and solar, Proc Natl Acad Sci USA, 14, 16, (2017), www.pnas.org/cgi/doi/10.1073/pnas.1610381114
+[2] Ziegler etal., Storage Requirements and Costs of Shaping Renewable Energy Toward Grid Decarbonization, Joule 3, 2134–2153 (2019), https://doi.org/10.1016/j.joule.2019.06.012
+[3] Ch. Breyer, etal., On the History and Future of 100% Renewable Energy Systems Research, IEEE Access, 10, (2022), DOI: 10.1109/ACCESS.2022.3193402
+[3] D. Bogdanov, Radical transformation pathway towards sustainable electricity via evolutionary steps, Nature Communications volume 10, Article number: 1077 (2019), https://www.nature.com/articles/s41467-019-08855-1
+[4] O. Ruhnau, O. Qvist, Storage requirements in a 100% renewable electricity system: extreme events and inter-annual variability, Environ. Res. Lett. 17 044018, (2022), DOI 10.1088/1748-9326/ac4dc8
+
+The model described here is intended to show the relationships between energy production, energy consumption and storage requirements to clarify a little. It is easier to understand than the models described in the literature and anyone who is interested can play with the code themselves with a little [Julia](https://julialang.org/) programming experience.
+
 ## Data
 
 The data used are from the site [Energy-Charts API](https://api.energy-charts.info/)
 
 1. download power data as json from https://api.energy-charts.info/power using the REST API:
-    * the minimum start_year is 2015
     * execute: **load_ise_energy_chart_data(start_year, end_year)**
         in **storage/data_energy_charts.jl**
+        the minimum start_year is 2015
 2. Parse downloaded json files and store date in a **hdf5** file
+   * execute **run_ise_json_to_hdf5(false, 2015, 2022)**
+        in **storage/data_energy_charts.jl**
 
 Energy-Chart data used in this model are:
 
@@ -46,6 +57,8 @@ Detrended Load data
 
 ### Detrend and Scale Renewables
 
+**function scale_and_detrend(Load::Vector{Float64}, RP::Vector{Float64})**
+
 1. First scaling
 $R_{s} = R \; \dfrac{\operatorname{mean}(L)}{\operatorname{mean}(R)}$
 
@@ -74,53 +87,22 @@ Differences beteeen reneable power and load
 
 ## Compute Storage Fill Level as Function of Time
 
-Given storage capacity and an overproduction capacity factor the algorithm is:
+Given storage capacity and an overproduction capacity factor the storage fille level is computed;
 
-    ms = Dates.value(dates[2] - dates[1])
-    Δh = ms/(3.6e6)
-    storage_capacity = storage_capacity / Δh
+**compute_storage_level(dates, Load, RP, eunit, over_production, storage_capacity)**
 
-    RP = RP .* over_production
-    # surplus or shortfall power
-    ΔP = (RP - Load)
+The algorithm in shortm is:
 
-    n  = size(RP, 1)
-    inflow   = zeros(Float64, n)
-    outflow  = zeros(Float64, n)
-    Import = zeros(Float64, n)
-    Export = zeros(Float64, n)
-    storage_fill = ones(Float64, n)
+$\Delta P = R - L$
 
-    storage_fill[1] = max(0.0, ΔP[1])
-    for i in 2:n
-        # if surplus
-        if ΔP[i] > 0.0
-            # add surplus energy to storage (time intervall is multiplied at the end)
-            storage_fill[i] = storage_fill[i-1] + ΔP[i]
-            inflow[i] = ΔP[i]
-            # if storage_capacity is reached
-            if storage_fill[i] > storage_capacity
-                D = storage_fill[i] - storage_capacity
-                storage_fill[i] = storage_capacity
-                inflow[i] = ΔP[i] - D
-                Export[i] = D
-            end
-        else # if shortfall
-            # substract shortfall energy from storage (time intervall is multiplied at the end)
-            storage_fill[i] = storage_fill[i-1] + ΔP[i]
-            outflow[i] = ΔP[i]
-            # if stotage is empty
-            if storage_fill[i] < 0.0
-                D = storage_fill[i]
-                storage_fill[i] = 0.0
-                outflow[i] = ΔP[i] - D
-                Import[i] = D
-            end
-        end
-    end
-    storage_fill = storage_fill .* Δh
-    (storage_fill, inflow ./ M2, outflow ./ M2, Import ./ M2, Export ./ M2)
+if $\Delta P > 0$ and $S < S_{capacity}$
+$\quad S = S + \Delta P \Delta t$
+elseif $\Delta P < 0$ and $S > 0$
+$\quad S = S - \Delta P \Delta t$
+end
 
 Storage fill level over time for different combinations of **storage capacity** and renewable overproduction factor **op**
 
 ![storage](figures/storage_fill.png)
+
+
