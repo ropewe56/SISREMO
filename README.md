@@ -1,25 +1,31 @@
 # SISREMO
 Simple Storage Reqirement Model for a 100% Renewable Energy System
 
+The model is implemented in [Julia](https://julialang.org/)
 ## Data
 
+The data used are from the site [Energy-Charts API](https://api.energy-charts.info/)
+
 1. download power data as json from https://api.energy-charts.info/power using the REST API:
-    * the minimum star_year is 2015
-    * execute: load_ise_energy_chart_data(start_year, end_year)
-        * storage/data_energy_charts.jl
-2. Parse downloaded json fiels and store date in a hdf5 file
+    * the minimum start_year is 2015
+    * execute: **load_ise_energy_chart_data(start_year, end_year)**
+        in **storage/data_energy_charts.jl**
+2. Parse downloaded json files and store date in a **hdf5** file
 
-Data used in this model are:
+Energy-Chart data used in this model are:
 
-1. Dates: UNIX timestamps are converted to Date objects
+1. Dates: UNIX timestamps are converted to Julia DateTime objects
 2. Load
 3. Sum of Wind offshore, Wind onshore and Solar
 
+Load and renewable time series data
 ![RP](figures/RP.png)
+
+The real data are adapted to mimic a 100% renewable eneryg system by detrending and scaling.
+
 ## Detrend and Scale Date
 
-The real data are adapted to mimic a 100% renewable eneryg system by deterending and scaling.
-
+Detrending is done by fitting teh data to a second order polynomial
 ### Detrend Load
 
 $k$  - polynomial order
@@ -34,9 +40,11 @@ $L$  - Load [MW]
 $L_{t}$ -  trend of Load, poynomial fit
 $L_{d}$ - detrended Load
 
+Detrended Load data
+
 ![Load_d](figures/Load_detrended.png)
 
-### Detrend Renewables
+### Detrend and Scale Renewables
 
 1. First scaling
 $R_{s} = R \; \dfrac{\operatorname{mean}(L)}{\operatorname{mean}(R)}$
@@ -58,8 +66,10 @@ $R_{s}$ -scaled $R$
 $R_d$ - detrended $R$
 $R_t$ - detrended and scaled $R$
 
+Detrended and scaled renewable power data
 ![RP_d](figures/RP_detrended.png)
 
+Differences beteeen reneable power and load
 ![RP_d](figures/RP_diff_detrended.png)
 
 ## Compute Storage Fill Level as Function of Time
@@ -111,5 +121,5 @@ Given storage capacity and an overproduction capacity factor the algorithm is:
     storage_fill = storage_fill .* Δh
     (storage_fill, inflow ./ M2, outflow ./ M2, Import ./ M2, Export ./ M2)
 
-
+Storage fill level over time for different combinations of storage capacity and renewable over production factor
 ![storage](figures/storage_fill.png)
