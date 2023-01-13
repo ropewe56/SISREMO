@@ -91,7 +91,7 @@ Given storage capacity and an overproduction capacity factor the storage fille l
 
 **compute_storage_level(dates, Load, RP, eunit, over_production, storage_capacity)**
 
-The algorithm in shortm is:
+The algorithm in short is:
 
 $\Delta P = R - L$
 
