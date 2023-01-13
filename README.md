@@ -14,7 +14,7 @@ Data used in this model are:
     2. Load
     3. Sum of Wind offshore, Wind onshore and Solar
 
-![RP](../data_ise/output/fig/RP.png)
+![RP](figures/RP.png)
 ## Detrend and Scale Date
 
 The real data are adapted to mimic a 100% renewable eneryg system by deterending and scaling.
@@ -33,7 +33,7 @@ $L$  - Load [MW]
 $L_{t}$ -  trend of Load, poynomial fit
 $L_{d}$ - detrended Load
 
-![Load_d](../data_ise/output/fig/Load_detrended.png)
+![Load_d](figures/Load_detrended.png)
 
 ### Detrend Renewables
 
@@ -57,9 +57,9 @@ $R_{s}$ -scaled $R$
 $R_d$ - detrended $R$
 $R_t$ - detrended and scaled $R$
 
-![RP_d](../figures/RP_detrended.png)
+![RP_d](figures/RP_detrended.png)
 
-![RP_d](../output/figures/RP_diff_detrended.png)
+![RP_d](figures/RP_diff_detrended.png)
 
 ## Compute Storage Fill Level as Function of Time
 
@@ -111,4 +111,4 @@ Given storage capacity and an overproduction capacity factor the algorithm is:
     (storage_fill, inflow ./ M2, outflow ./ M2, Import ./ M2, Export ./ M2)
 
 
-![storage](../figures/storage_fill.png)
+![storage](figures/storage_fill.png)
