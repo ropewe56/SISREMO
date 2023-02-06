@@ -8,8 +8,10 @@ include("storage/utils.jl")
 include("storage/hdf5_utils.jl")
 include("storage/data_energy.jl")
 
-sisremo_root = dirname(@__DIR__)
-get_fig_dir() = joinpath(sisremo_root, "figures")
+root = dirname(@__DIR__)
+get_data_dir()   = joinpath(root, "data_ise", "energy_charts_data")
+get_output_dir() = joinpath(root, "data_ise", "output")
+get_fig_dir()    = joinpath(root, "data_ise", "figures")
 
 
 """
@@ -30,9 +32,11 @@ function scale_and_detrend(Load::Vector{Float64}, RP::Vector{Float64})
 
     scale = (mean(Load) / mean(RP))
     @infoe @sprintf("(mean(RP) / mean(Load)) = %3.2f", 1.0/scale)
+
     # scale RP
     RP_sc = @. RP * scale
 
+    # detrend RP
     RP_trend = polynomial_fit(RP_sc, k)
     RP_de = @. RP_sc * RP_trend[nh] / RP_trend
 
@@ -190,7 +194,8 @@ function plot_powers(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{
 end
 
 function plot_detrended(dates::Vector{DateTime}, RP::Vector{Float64}, RP_de::Vector{Float64}, RP_trend::Vector{Float64}, ΔEL::Vector{Float64},
-    Load::Vector{Float64}, Load_de::Vector{Float64}, Load_trend::Vector{Float64}, eunit ::String, fig_dir::String, fig::Vector{Int64}; data_are_averaged = false)
+    Load::Vector{Float64}, Load_de::Vector{Float64}, Load_trend::Vector{Float64}, 
+    eunit ::String, fig_dir::String, fig::Vector{Int64}; data_are_averaged = false)
 
     eunit_factor = uconvert(eunit, "GW")
 
@@ -250,7 +255,7 @@ function plot_detrended(dates::Vector{DateTime}, RP::Vector{Float64}, RP_de::Vec
 end
 
 function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64}, 
-    storage_fill_res, fig_dir::String, fig::Vector{Int64}, pngpath::String; data_are_averaged = false, plot_all_p = false)
+    storage_fill_res, fig_dir::String, fig::Vector{Int64}, pngpath::String; plot_all_p = false)
 
     prozent = "%"
     pl.figure(fig[1]); fig[1] += 1
@@ -309,7 +314,7 @@ function comp_and_plot(;plot_p = false)
 
     # use GW
     eunit = ["MW", "GW", "TW"][2]
-    data = EnergyData(eunit);
+    data = EnergyData(get_data_dir(), eunit);
     Load = data.Load
     # renewables is sum of wind onshore, wind offshore and solar
     RP = @. data.Woff + data.Won + data.Solar;
@@ -334,7 +339,7 @@ function comp_and_plot_averaged(;plot_p = false)
 
     # use GW
     eunit = ["MW", "GW", "TW"][2]
-    data = EnergyData(eunit);
+    data = EnergyData(get_data_dir(), eunit);
     Load = data.Load
     RP = @. data.Woff + data.Won + data.Solar;
     dates = data.dates
@@ -351,11 +356,11 @@ function comp_and_plot_averaged(;plot_p = false)
         mkpath(fig_dir)
         fig = [1]
         plot_powers(dates, Load_av, RP_av, averaging_hours, fig_dir, eunit, fig)
-        plot_detrended(dates, RP_av, RP_av_de, RP_av_trend, ΔEL_av, Load_av, Load_av_de, Load_av_trend, eunit, fig_dir, fig, data_are_averaged = true)
-        plot_storage_fill_level(dates, Load_av_de, RP_av_de, storage_fill_res, fig_dir, fig, "storage_file_av", data_are_averaged = true)
+        plot_detrended(dates, RP, RP_av_de, RP_av_trend, ΔEL_av, Load_av, Load_av_de, Load_av_trend, eunit, fig_dir, fig, data_are_averaged = true)
+        plot_storage_fill_level(dates, Load_av_de, RP_av_de, storage_fill_res, fig_dir, fig, "storage_file_av")
     end
 end
 
-comp_and_plot(plot_p=true)
+comp_and_plot(plot_p=true);
 
 comp_and_plot_averaged(plot_p=true);

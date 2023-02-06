@@ -37,9 +37,9 @@ end
     Nuclear:: Vector{Float64}  # 10
     dates  :: Vector{DateTime} # 11
 """
-function EnergyData_ise()
+function EnergyData_ise(data_dir)
     # load data matrix from hdf5 file
-    D = load_ise_as_hdf5()
+    D = load_ise_as_hdf5(data_dir)
     # Unix time stamps are stored as Float64 in D => to Int
     uts = floor.(Int, D[:,1])
     # convert Unix time stamps to Date objects
@@ -64,8 +64,8 @@ end
 
     EnergyData constructor
 """
-function EnergyData(eunit)
-    uts, Load, Woff, Won, Solar, Bio, Nuclear, dates = EnergyData_ise()
+function EnergyData(data_dir, eunit)
+    uts, Load, Woff, Won, Solar, Bio, Nuclear, dates = EnergyData_ise(data_dir)
     # energy charts data are in MW, M2 is conversion factor to eunit (MW, GW, TW)
     M2 = uconvert("MW", eunit)
     EnergyData(uts, Load .* M2, Woff .* M2, Won .* M2, Solar .* M2, Bio .* M2, Nuclear .* M2, dates)

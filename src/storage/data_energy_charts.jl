@@ -16,28 +16,28 @@ get_data_dir() = joinpath(sisremo_dir, "data")
 
     year : power data as json is downloaded for year and saved to power_<year>.json
 """
-function download_ise_power_data(year)
+function download_ise_power_data(data_dir, year)
     query = [("country" => "DE"), ("start", @sprintf("%s-01-01T00:00Z",year)), ("end", @sprintf("%s-12-31T00:00Z", year))]
     url   = "https://api.energy-charts.info/power"
     resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
     b     = String(resp.body)
-    open(joinpath(get_data_dir(), @sprintf("power_%s.json", year)), "w") do out
+    open(joinpath(data_dir, @sprintf("power_%s.json", year)), "w") do out
         write(out, b)
     end
 end
-download_ise_power_data(2022)
+#download_ise_power_data(2022)
 
 """
     download_ise_istalled_power_data()
 
     downlaod the intsalled data and save in file installed_power.json
 """
-function download_ise_istalled_power_data()
+function download_ise_istalled_power_data(data_dir)
     query = Dict("country" => "de", "time_step" => "monthly", "installation_decomission" => false)
     url   = "https://api.energy-charts.info/installed_power"
     resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
     b     = String(resp.body)
-    open(joinpath(get_data_dir(), "installed_power.json"), "w") do out
+    open(joinpath(data_dir, "installed_power.json"), "w") do out
         write(out, b)
     end
 end
@@ -126,9 +126,9 @@ function ise_json_to_hdf5(uts_key, ise_keys, data_root, datafiles, hdf5_path1, h
     save_array_as_hdf5(hdf5_path2, DD, group = "ise_power", dataset = "ise_power_2015-2022", script_dir=false, colm_to_rowm_p = true)
 end
 
-function load_ise_energy_chart_data(start_year, end_year)
+function load_ise_energy_chart_data(data_dir, start_year, end_year)
     for year in start_year:end_year
-        download_ise_power_data(year)
+        download_ise_power_data(data_dir, year)
     end
 end
 
@@ -138,7 +138,7 @@ end
     download_json_p : if true downlaod energy_chart data start_year:end_year
 
 """
-function run_ise_json_to_hdf5(download_json_p::Bool, start_year::Int64, end_year::Int64)
+function run_ise_json_to_hdf5(data_dir, download_json_p::Bool, start_year::Int64, end_year::Int64)
     ise_keys_all = [
         "Load (MW)",                                #  1
         "Residual load (MW)",                       #  2
@@ -164,22 +164,22 @@ function run_ise_json_to_hdf5(download_json_p::Bool, start_year::Int64, end_year
         "Renewable share of load (%)"]              # 22
 
     if download_json_p
-        load_ise_energy_chart_data(start_year, end_year)
+        load_ise_energy_chart_data(data_dir, start_year, end_year)
     end
 
     uts_key = "xAxisValues (Unix timestamp)"
     datafiles = [@sprintf("power_%d.json", y) for y in 2015:2022]
-    hdf5_path1 = joinpath(get_data_dir(), "ise_power_all.hdf5")
-    hdf5_path2 = joinpath(get_data_dir(), "ise_power_all_2015-2022.hdf5")
-    ise_json_to_hdf5(uts_key, ise_keys_all, get_data_dir(), datafiles, hdf5_path1, hdf5_path2)
+    hdf5_path1 = joinpath(data_dir, "ise_power_all.hdf5")
+    hdf5_path2 = joinpath(data_dir, "ise_power_all_2015-2022.hdf5")
+    ise_json_to_hdf5(uts_key, ise_keys_all, data_dir, datafiles, hdf5_path1, hdf5_path2)
 end
 #run_ise_json_to_hdf5(false, 2015, 2024)
 
 """
     load ise energy charts data stored in hdf5 file
 """
-function load_ise_as_hdf5()
-    hdf5_path = joinpath(get_data_dir(), "ise_power_all_2015-2022.hdf5")
+function load_ise_as_hdf5(data_dir)
+    hdf5_path = joinpath(data_dir, "ise_power_all_2015-2022.hdf5")
     load_array_as_hdf5(hdf5_path, group = "ise_power", dataset = "ise_power_2015-2022", script_dir=false, colm_to_rowm_p = true)
 end
 
