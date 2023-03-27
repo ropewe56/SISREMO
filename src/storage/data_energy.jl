@@ -59,14 +59,44 @@ struct EnergyData
     dates   :: Vector{DateTime} # 11
 end
 
+
+function average_to_hour(X)
+    n = size(X,1)
+    #m = div(n, 4)
+    #Y = zeros(Float64, m)
+    #j = 1
+    #for i in 1:m
+    #    Y[i] = (X[j] + X[j+1] + X[j+2] + X[j+3]) * 0.25
+    #    j += 4
+    #end
+    @. (X[1:4:n-3] + X[2:4:n-2] + X[3:4:n-1] + X[4:4:n]) * 0.25
+end
+
 """
     EnergyData(eunit)
 
     EnergyData constructor
 """
 function EnergyData(data_dir, eunit)
-    uts, Load, Woff, Won, Solar, Bio, Nuclear, dates = EnergyData_ise(data_dir)
+    uts_4, Load_4, Woff_4, Won_4, Solar_4, Bio_4, Nuclear_4, dates_4 = EnergyData_ise(data_dir)
     # energy charts data are in MW, M2 is conversion factor to eunit (MW, GW, TW)
+
+    n = length(Load_4)
+    uts     = uts_4[1:4:n]
+    dates   = dates_4[1:4:n]
+    Load    = average_to_hour(Load_4)
+    Woff    = average_to_hour(Woff_4)
+    Won     = average_to_hour(Won_4)
+    Solar   = average_to_hour(Solar_4)
+    Bio     = average_to_hour(Bio_4)
+    Nuclear = average_to_hour(Nuclear_4)
+
     M2 = uconvert("MW", eunit)
+
+    @infoe ("# timesteps =", length(Load), "energy conversion =", M2)
+
     EnergyData(uts, Load .* M2, Woff .* M2, Won .* M2, Solar .* M2, Bio .* M2, Nuclear .* M2, dates)
 end
+
+n = 10
+collect(1:4:n)

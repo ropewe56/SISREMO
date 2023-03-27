@@ -1,31 +1,47 @@
 using DataStructures
-using JSON
 using HTTP
 using Dates
 using Printf
+using Common # json io, @ionfoe
 
 import PyPlot as plt
 plt.pygui(true)
 plt.pygui(:qt5)
 
+# project root directory
 sisremo_dir = dirname(dirname(@__DIR__))
 get_data_dir() = joinpath(sisremo_dir, "data")
 
 """
-    download_ise_power_data(year)
+    download_ise_power_data(data_dir, year)
 
+    data_dir : directory where to store downloaded json file
     year : power data as json is downloaded for year and saved to power_<year>.json
 """
 function download_ise_power_data(data_dir, year)
-    query = [("country" => "DE"), ("start", @sprintf("%s-01-01T00:00Z",year)), ("end", @sprintf("%s-12-31T00:00Z", year))]
+    query = [("country" => "DE"), ("start", @sprintf("%s-01-01T00:00Z",year)), ("end", @sprintf("%s-12-31T23:59Z", year))]
     url   = "https://api.energy-charts.info/power"
     resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
-    b     = String(resp.body)
-    open(joinpath(data_dir, @sprintf("power_%s.json", year)), "w") do out
-        write(out, b)
+    str   = String(resp.body)
+    path  = joinpath(data_dir, @sprintf("power_%s.json", year))
+    # write String str to path
+    open(path, "w") do out
+        write(out, str)
     end
 end
-#download_ise_power_data(2022)
+#download_ise_power_data(get_data_dir(), 2022)
+
+function extract_start_end_date(data_dir, year)
+    uts_key = "xAxisValues (Unix timestamp)"
+    path = joinpath(data_dir, @sprintf("power_%s.json", year))
+
+    b = load_json(path)
+
+    date_time = @. unix2datetime(b[uts_key])
+    @info (date_time[1], date_time[end])
+    @info get_nb_days(date_time[1], date_time[end])
+end
+#extract_start_end_date(get_data_dir(), 2022)
 
 """
     download_ise_istalled_power_data()
@@ -45,37 +61,37 @@ end
 """
     keys in energy_charts json files
 
-    xAxisValues (Unix utstamp)
-    Hydro pumped storage consumption (MW)
-    Import Balance (MW)
-    Nuclear (MW)
-    Hydro Run-of-River (MW)
-    Biomass (MW)
-    Fossil brown coal / lignite (MW)
-    Fossil coal-derived gas (MW)
-    Fossil hard coal (MW)
-    Fossil oil (MW)
-    Fossil gas (MW)
-    Geothermal (MW)
-    Hydro water reservoir (MW)
-    Hydro pumped storage (MW)
-    Others (MW)
-    Waste (MW)
-    Wind offshore (MW)
-    Wind onshore (MW)
-    Solar (MW)
-    Load (MW)
-    Residual load (MW)
-    Renewable share of generation (%)
-    Renewable share of load (%)
+    xAxisValues                      [Unix utstamp]
+    Hydro pumped storage consumption [MW]
+    Import Balance                   [MW]
+    Nuclear                          [MW]
+    Hydro Run-of-River               [MW]
+    Biomass                          [MW]
+    Fossil brown coal / lignite      [MW]
+    Fossil coal-derived gas          [MW]
+    Fossil hard coal                 [MW]
+    Fossil oil                       [MW]
+    Fossil gas                       [MW]
+    Geothermal                       [MW]
+    Hydro water reservoir            [MW]
+    Hydro pumped storage             [MW]
+    Others                           [MW]
+    Waste                            [MW]
+    Wind offshore                    [MW]
+    Wind onshore                     [MW]
+    Solar                            [MW]
+    Load                             [MW]
+    Residual load                    [MW]
+    Renewable share of generation    [%]
+    Renewable share of load          [%]
 
     ise_json_to_hdf5(uts_key, ise_keys, data_root, hdf5_path1, hdf5_path2)
 
     read all power data json files, combine them and store in hdf5 format
 
-    uts_key : key of the tome instances given as Unix utstamp
-    ise_keys : keys for data columns to include
-    data_root : directory where jsons files are
+    uts_key    : key of the time instances column given as Unix utstamp, "xAxisValues (Unix timestamp)"
+    ise_keys   : keys for data columns to include
+    data_root  : directory where jsons files are
     hdf5_path1 : data matrices per year are stored in this hdf5 file
     hdf5_path2 : concatenated data matrices are stored as singel matrix in this hdf5 file
 """
@@ -90,7 +106,8 @@ function ise_json_to_hdf5(uts_key, ise_keys, data_root, datafiles, hdf5_path1, h
     for df in datafiles
         @infoe df
         # read and parse json
-        d = JSON.parsefile(joinpath(data_root, df), dicttype=DataStructures.OrderedDict, inttype=Int64, use_mmap=true)
+        path = joinpath(data_root, df)
+        d = from_json(path)
         # d ise_keys to include
         @infoe keys(d)
 
@@ -167,13 +184,13 @@ function run_ise_json_to_hdf5(data_dir, download_json_p::Bool, start_year::Int64
         load_ise_energy_chart_data(data_dir, start_year, end_year)
     end
 
-    uts_key = "xAxisValues (Unix timestamp)"
-    datafiles = [@sprintf("power_%d.json", y) for y in 2015:2022]
+    uts_key    = "xAxisValues (Unix timestamp)"
+    datafiles  = [@sprintf("power_%d.json", y) for y in 2015:2022]
     hdf5_path1 = joinpath(data_dir, "ise_power_all.hdf5")
     hdf5_path2 = joinpath(data_dir, "ise_power_all_2015-2022.hdf5")
     ise_json_to_hdf5(uts_key, ise_keys_all, data_dir, datafiles, hdf5_path1, hdf5_path2)
 end
-#run_ise_json_to_hdf5(false, 2015, 2024)
+#run_ise_json_to_hdf5(get_data_dir(), false, 2015, 2024)
 
 """
     load ise energy charts data stored in hdf5 file

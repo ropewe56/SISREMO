@@ -1,22 +1,41 @@
 using CurveFit
 using Dates
+using JSON
 
-macro infoe(message)
-    fl = string(basename(string(__source__.file)), ":", (__source__.line))
-    return :( @printf("[ Info: %s | %s\n", $fl, $(esc(message))) )
-end
+#macro infoe(message)
+#    fl = string(basename(string(__source__.file)), ":", (__source__.line))
+#    return :( @printf("[ Info: %s | %s\n", $fl, $(esc(message))) )
+#end
 
-linspace(a, b, n) = collect(LinRange(a, b, n))
+#linspace(a, b, n) = collect(LinRange(a, b, n))
 
-"""
-    unix utstamp vergangene Sekunden seit Donnerstag, 1. Januar 1970, 00:00 Uhr UTC.
-    date -u -d @1234567890
-    "2021-01-01T17:00Z" >= T-time=17:00, Z=UTC
-"""
-uts2date(uts)  = @. unix2datetime(uts)
-date2uts(date) = @. floor(Int64, datetime2unix(date))
-
-date2ymwdhms(dt) = year(dt), month(dt), week(dt), day(dt), hour(dt), minute(dt), second(dt)
+#"""
+#    unix utstamp vergangene Sekunden seit Donnerstag, 1. Januar 1970, 00:00 Uhr UTC.
+#    date -u -d @1234567890
+#    "2021-01-01T17:00Z" >= T-time=17:00, Z=UTC
+#"""
+#uts2date(uts)  = @. unix2datetime(uts)
+#date2uts(date) = @. floor(Int64, datetime2unix(date))
+#
+#date2ymwdhms(dt) = year(dt), month(dt), week(dt), day(dt), hour(dt), minute(dt), second(dt)
+#
+#"""
+#    JSON write
+#"""
+#function to_json(path::String, d)
+#    open(path, "w") do out
+#        JSON.print(out, d, 4)
+#    end
+#end
+#"""
+#    JSON read
+#"""
+#function from_json2(path)
+#    open(path, "r") do ein
+#        d = read(ein, String)
+#        return JSON.parse(d)
+#    end
+#end
 
 
 """
@@ -143,27 +162,6 @@ function simple_damping(y, α)
         L[i] = α*y[i] + (1.0-α)*L[i-1]
     end
     L
-end
-
-function replace_missing(data::Vector{T}; toreplace = missing) where {T}
-    n = length(data)
-    v = Vector{T}(undef, n)
-
-    j = 1
-    while data[j] === toreplace
-        j += 1
-    end
-    v[1:j] .= data[j]
-
-    for i in j:n
-        s = data[i]
-        if s === toreplace
-            v[i] = v[i-1]
-        else
-            v[i] = data[i]
-        end
-    end
-    v
 end
 
 function average_data(Load, EE, dates, averaging_hours)
