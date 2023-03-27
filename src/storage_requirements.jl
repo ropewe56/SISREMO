@@ -1,5 +1,4 @@
 using Common
-using Statistics
 
 import PyPlot as pl
 pl.pygui(true)
@@ -15,8 +14,8 @@ mkpath(get_fig_dir())
 
 eunit = ["MW", "GW", "TW"][2]
 
-plot_p     = true
-plot_all_p = true
+plot_p     = false#true
+plot_all_p = false#true
 comp_and_plot(get_data_dir(), get_fig_dir(), eunit, plot_p=plot_p, plot_all_p=plot_all_p);
 
 # comp_and_plot_averaged(get_data_dir(), enunit, plot_p=true);

@@ -50,49 +50,50 @@ function scale_and_detrend(Load::Vector{Float64}, RP::Vector{Float64})
 end
 
 mutable struct Storage
-    CP :: Float64         # storage capacity [punit_h]
+    SC :: Float64         # storage capacity [punit_h]
     SF :: Vector{Float64} # storage fill     [punit_h]
     IF :: Vector{Float64} # inflow           [punit]
     OF :: Vector{Float64} # outflow          [punit]
     CT :: Vector{Float64} # curtailement     [punit]
     IM :: Vector{Float64} # import           [punit]
 end
-function Storage(CP::Float64, n::Int64)
+function Storage(SC::Float64, n::Int64)
     SF = zeros(Float64, n)
     IF = zeros(Float64, n)
     OF = zeros(Float64, n)
     CT = zeros(Float64, n)
     IM = zeros(Float64, n)
-    Storage(CP, SF, IF, OF, CT, IM)
+    Storage(SC, SF, IF, OF, CT, IM)
 end
 
 function charge(st::Storage, ΔPin, i, out, j)
-    ΔPout = 0.0
+    local ΔPout
     if ΔPin > 0.0
-        D = st.CP - st.SF[i-1]
+        D = st.SC - st.SF[i-1]
         if D > ΔPin
-            st.SF[i] = st.SF[i-1] + ΔPin
             st.IF[i] = ΔPin
-            write(out, @sprintf("%d 1 %9.2e,  %9.2e, %9.2e\n", j, st.SF[i], ΔPin, st.CP))
+            st.SF[i] = st.SF[i-1] + st.IF[i]
+            ΔPout    = 0.0
+            write(out, @sprintf("%d  1  ΔP=%9.2e, S=%9.2e, I=%9.2e, O=%9.2e, C=%9.2e, M=%9.2e\n", j, ΔPin, st.SF[i], st.IF[i], st.OF[i], st.CT[i], st.IM[i]))
         else
-            st.SF[i] = st.SF[i-1] + D
             st.IF[i] = D
-            st.CT[i] = ΔPin - D
-            ΔPout = st.CT[i]
-            write(out, @sprintf("%d 2 %9.2e,  %9.2e, %9.2e\n", j, st.SF[i], ΔPin, st.CP))
+            st.SF[i] = st.SF[i-1] + st.IF[i]
+            st.CT[i] = ΔPin - st.IF[i]
+            ΔPout    = st.CT[i]
+            write(out, @sprintf("%d  2  ΔP=%9.2e, S=%9.2e, I=%9.2e, O=%9.2e, C=%9.2e, M=%9.2e\n", j, ΔPin, st.SF[i], st.IF[i], st.OF[i], st.CT[i], st.IM[i]))
         end
     else
-        D = st.SF[i-1]
-        if D > -ΔPin
-            st.SF[i] = st.SF[i-1] + ΔPin
-            st.OF[i] = ΔPin
-            write(out, @sprintf("%d 3 %9.2e,  %9.2e, %9.2e\n", j, st.SF[i], ΔPin, st.CP))
+        if st.SF[i-1] > -ΔPin
+            st.OF[i] = -ΔPin
+            st.SF[i] = st.SF[i-1] - st.OF[i]
+            ΔPout    = 0.0
+            write(out, @sprintf("%d  3  ΔP=%9.2e, S=%9.2e, I=%9.2e, O=%9.2e, C=%9.2e, M=%9.2e\n", j, ΔPin, st.SF[i], st.IF[i], st.OF[i], st.CT[i], st.IM[i]))
         else
-            st.SF[i] = st.SF[i-1] + D
-            st.OF[i] = D
-            st.IM[i] = ΔPin - D
-            ΔPout = st.IM[i]
-            write(out, @sprintf("%d 4 %9.2e,  %9.2e, %9.2e\n", j, st.SF[i], ΔPin, st.CP))
+            st.OF[i] = st.SF[i-1]
+            st.SF[i] = st.SF[i-1] - st.OF[i]
+            st.IM[i] = -ΔPin - st.OF[i]
+            ΔPout    = -st.IM[i]
+            write(out, @sprintf("%d  4  ΔP=%9.2e, S=%9.2e, I=%9.2e, O=%9.2e, C=%9.2e, M=%9.2e\n", j, ΔPin, st.SF[i], st.IF[i], st.OF[i], st.CT[i], st.IM[i]))
         end
     end
     ΔPout
@@ -112,7 +113,7 @@ end
     storage_capacity : storage capacity
 """
 function compute_storage_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64},
-    stcap1::Float64, stcap2::Float64, oprod::Float64)
+    stc1::Float64, stc2::Float64, oprod::Float64)
 
     # Dates.value(DateTime) => ms since 1 AD
     ms = Dates.value(dates[2] - dates[1])
@@ -120,8 +121,8 @@ function compute_storage_level(dates::Vector{DateTime}, Load::Vector{Float64}, R
     Δh = ms/(3.6e6)
 
     # E => P * 15 min
-    stcap1 = stcap1 / Δh
-    stcap2 = stcap2 / Δh
+    stc1 = stc1 / Δh
+    stc2 = stc2 / Δh
 
     # renewable energy over production
     RP = RP .* oprod
@@ -132,12 +133,21 @@ function compute_storage_level(dates::Vector{DateTime}, Load::Vector{Float64}, R
     out1 = open("llog1.log", "w")
     out2 = open("llog2.log", "w")
 
-    stg1 = Storage(stcap1, n)
-    stg2 = Storage(stcap2, n)
+    stg1 = Storage(stc1, n)
+    stg2 = Storage(stc2, n)
     for i in 2:n
         ΔPout1 = charge(stg1, ΔP[i],  i, out1, 1)
         ΔPout2 = charge(stg2, ΔPout1, i, out2, 2)
     end
+    E1I = energy(dates, stg1.IF)
+    E1O = energy(dates, stg1.OF)
+    E1F = stg1.SF[end]
+    E2I = energy(dates, stg2.IF)
+    E2O = energy(dates, stg2.OF)
+    E2F = stg2.SF[end]
+
+    @infoe @sprintf("Balance 1 = %9.3e, %9.3e, %9.3e, %9.3e", E1I, E1O, E1F,  E1I - E1O - E1F)
+    @infoe @sprintf("Balance 2 = %9.3e, %9.3e, %9.3e, %9.3e", E2I, E2O, E2F,  E2I - E2O - E2F)
 
     stg1.SF = stg1.SF .* Δh
     stg2.SF = stg2.SF .* Δh
@@ -148,26 +158,16 @@ end
 """
     compute storage fill level for different combinations of storage_capacity and over_production
 """
-function compute_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64}, punit::String)
-    if punit == "GW"
-        c = 1.0e3
-    elseif punit == "TW"
-        c = 1.0
-    end
-    stcap1  = [14.0, 26.0, 35.0, 45.0] .* c
-    oprod  = [1.5, 1.2, 1.15, 1.1, 1.05]
-    stcap2 = @. stcap1 * 0.1
-    stcap1 = @. stcap1 - stcap2
-    @infoe @sprintf("stcap1 = %s, stcap2 = %s", stcap1, stcap2)
+function compute_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64}, punit::String, stc1, stc2, oprod)
+    @infoe @sprintf("stc1 = %s, stc2 = %s", stc1, stc2)
 
     res1 = []
     res2 = []
-    scop = []
-    for (sc1, sc2, op) in zip(stcap1, stcap2, oprod)
+    for (sc1, sc2, op) in zip(stc1, stc2, oprod)
         stg1, stg2 = compute_storage_level(dates, Load, RP, sc1, sc2, op)
 
-        @infoe @sprintf("sc1 = %8.2e, sc2 = %8.2e, op = %3.1f, SF1[end] = %8.2e, CP1 = %8.2e, SF2[end] = %8.2e, CP2 = %8.2e", 
-           sc1, sc2, op, stg1.SF[end], stg1.CP, stg2.SF[end], stg2.CP)
+        @infoe @sprintf("sc1 = %8.2e, sc2 = %8.2e, op = %3.1f, SF1[end] = %8.2e, SC1 = %8.2e, SF2[end] = %8.2e, SC2 = %8.2e", 
+           sc1, sc2, op, stg1.SF[end], stg1.SC, stg2.SF[end], stg2.SC)
 
         push!(res1, stg1)
         push!(res2, stg2)
@@ -188,21 +188,21 @@ function determine_overproduction(dates::Vector{DateTime}, Load::Vector{Float64}
     overproduction = collect(LinRange(1.05, 1.5, 20))
     storage_capacities = []
     for op in overproduction
-        stcap1 = 1.0
-        stcap2 = 1.0
+        stc1 = 1.0
+        stc2 = 1.0
         minS = -1.0
         it = 0
         while minS < 0.0 && it < 50
-            stg1, stg2 = compute_storage_level(dates, Load, RP, op, stcap1, stcap2)
+            stg1, stg2 = compute_storage_level(dates, Load, RP, op, stc1, stc2)
 
             min_storage_level1 = minimum(stg1.SF)
             min_storage_level2 = minimum(stg2.SF)
 
-            stcap1 = stcap1 - min_storage_level1
-            stcap2 = stcap2 - min_storage_level2
+            stc1 = stc1 - min_storage_level1
+            stc2 = stc2 - min_storage_level2
             it += 1
         end
-        push!(storage_capacities, (stcap1, stcap2))
+        push!(storage_capacities, (stc1, stc2))
     end
     plt.plot(overproduction, storage_capacities, "r.")
 end
@@ -300,14 +300,12 @@ function plot_detrended(dates::Vector{DateTime}, RP::Vector{Float64}, RP_de::Vec
 end
 
 function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64},
-    storage, sc_op, title, fig_dir::String, fig::Vector{Int64}, pngpath::String, punit ::String; plot_all_p = false)
+    storage, oprod, title, fig_dir::String, fig::Vector{Int64}, pngpath::String, punit ::String; plot_all_p = false)
 
     prozent = "%"
     pl.figure(fig[1]); fig[1] += 1
-    for (stg, so) in zip(storage, sc_op)
-        sc = so[1]
-        op = so[2]
-    label = @sprintf("%s storage_cpacity=%2.f %s, op = %3.f %s", title, sc, punit, (op-1.0)*100.0, prozent)
+    for (stg, op) in zip(storage, oprod)
+        label = @sprintf("%s storage_cpacity=%2.fh %s, op = %3.f %s", title, stg.SC, punit, (op-1.0)*100.0, prozent)
         pl.plot(dates, stg.SF, label = label)
     end
     pl.xlabel("time")
@@ -317,9 +315,8 @@ function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64},
     pl.savefig(joinpath(fig_dir, pngpath.*".png"))
 
     if plot_all_p
-        for (stg, so) in zip(storage, sc_op)
-            sc= so[1]
-            op= so[2]
+        for (stg, op) in zip(storage, oprod)
+            sc = stg.SC
 
             pl.figure(fig[1]); fig[1] += 1
             pl.plot(dates, RP .* op ,   label="RP")
@@ -411,7 +408,19 @@ function comp_and_plot(data_dir, fig_dir, punit; plot_p = false, plot_all_p = fa
 
     #@infoe (sum(Load)/8.0,  energy(dates, Load))
 
-    (res1, res2, oprod) = compute_storage_fill_level(dates, Load_de, RP_de, punit)
+    conversion_factor = uconvert("TW", punit)
+
+    stc2  = [14.0, 26.0, 35.0, 45.0] .* conversion_factor
+    oprod = [1.5, 1.2, 1.15, 1.1, 1.05]
+
+    stc2  = [26.0] .* conversion_factor
+    oprod = [1.2]
+
+    # stc1 < stc2
+    stc1 = @. stc2 * 0.1
+    stc2 = @. stc2 - stc1
+
+    (res1, res2, oprod) = compute_storage_fill_level(dates, Load_de, RP_de, punit, stc1, stc2, oprod)
     # Vector{(storage_fill, stg1, stg2, sc, op)}
 
     for (stg1, stg2, op) in zip(res1, res2, oprod)
@@ -428,7 +437,7 @@ function comp_and_plot(data_dir, fig_dir, punit; plot_p = false, plot_all_p = fa
         SF2  = stg2.SF[end]*dEL
 
         @infoe @sprintf("----------------------")
-        @infoe @sprintf("sc = %10.4e, op = %10.4e", stg1.CP, stg2.CP)
+        @infoe @sprintf("sc = %10.4e, op = %10.4e", stg1.SC, stg2.SC)
         @infoe @sprintf("SF1[end] = %8.2e, SF2[end] = %8.2e, Load/y = %8.2e", stg1.SF[end], stg2.SF[end], energy(dates, Load))
         @infoe @sprintf("IF = %10.4e, OF = %10.4e, IF-OF = %10.4e, SF = %10.4e,  CT = %10.4e, IM = %10.4e", 
             IF1, -OF1,  IF1+OF1, SF1, CT1, IM1)
