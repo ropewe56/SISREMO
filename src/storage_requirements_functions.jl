@@ -409,13 +409,13 @@ function load_data(data_dir, punit)
         Dates.day(dates[end]), Dates.month(dates[end]), Dates.year(dates[end]))
 
     # energy-chart data => 15 min time resolution, 1h = 60 * 60 * 1000 ms = 3.6e6 ms
-    @infoe @sprintf("RE = %8.2e %sh", energy(dates, RP  ), punit)
-    @infoe @sprintf("LE = %8.2e %sh", energy(dates, Load), punit)
+    @infoe @sprintf("RE = %8.2e %sh", powers_to_energy_per_year(dates, RP  ), punit)
+    @infoe @sprintf("LE = %8.2e %sh", powers_to_energy_per_year(dates, Load), punit)
 
     RP_de, RP_trend, ΔEL, Load_de, Load_trend = scale_and_detrend(Load, RP);
 
-    @infoe @sprintf("RE_de = %8.2e %sh", energy(dates, RP_de  ), punit)
-    @infoe @sprintf("LE_de = %8.2e %sh", energy(dates, Load_de), punit)
+    @infoe @sprintf("RE_de = %8.2e %sh", powers_to_energy_per_year(dates, RP_de  ), punit)
+    @infoe @sprintf("LE_de = %8.2e %sh", powers_to_energy_per_year(dates, Load_de), punit)
 
     dates, Load, RP, RP_de, RP_trend, ΔEL, Load_de, Load_trend, BM
 end
@@ -432,15 +432,15 @@ function comp_and_plot(stc1, stc2, oprod, data_dir, fig_dir, punit; plot_p = fal
     # Vector{(storage_fill, stg1, stg2, sc, op)}
 
     for (stg1, stg2, op) in zip(res1, res2, oprod)
-        Load_per_year = energy(dates, Load)
-        IF1  = energy(dates, stg1.IF) / Load_per_year
-        OF1  = energy(dates, stg1.OF) / Load_per_year
-        CT1  = energy(dates, stg1.CT) / Load_per_year
-        IM1  = energy(dates, stg1.IM) / Load_per_year
-        IF2  = energy(dates, stg2.IF) / Load_per_year
-        OF2  = energy(dates, stg2.OF) / Load_per_year
-        CT2  = energy(dates, stg2.CT) / Load_per_year
-        IM2  = energy(dates, stg2.IM) / Load_per_year
+        Load_per_year = powers_to_energy_per_year(dates, Load)
+        IF1  = powers_to_energy_per_year(dates, stg1.IF) / Load_per_year
+        OF1  = powers_to_energy_per_year(dates, stg1.OF) / Load_per_year
+        CT1  = powers_to_energy_per_year(dates, stg1.CT) / Load_per_year
+        IM1  = powers_to_energy_per_year(dates, stg1.IM) / Load_per_year
+        IF2  = powers_to_energy_per_year(dates, stg2.IF) / Load_per_year
+        OF2  = powers_to_energy_per_year(dates, stg2.OF) / Load_per_year
+        CT2  = powers_to_energy_per_year(dates, stg2.CT) / Load_per_year
+        IM2  = powers_to_energy_per_year(dates, stg2.IM) / Load_per_year
         SF1  = stg1.SF[end] / Load_per_year
         SF2  = stg2.SF[end] / Load_per_year
 
