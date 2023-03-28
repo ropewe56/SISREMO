@@ -11,7 +11,7 @@ get_data_dir()   = joinpath(root, "data")
 get_fig_dir()    = joinpath(root, "figures")
 mkpath(get_fig_dir())
 
-
+#"python.terminal.activateEnvironment": false
 
 function get_storage_capacities(punit)
 
