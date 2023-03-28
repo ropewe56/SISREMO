@@ -355,7 +355,7 @@ function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64},
             pl.xlabel(@sprintf("P [%s]", punit))
             pl.title(@sprintf("%s Load, RP: SC=%2.f [%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
             pl.legend()
-            pl.savefig(joinpath(fig_dir, @sprintf("%s_1_%2.f_%3.f.png", title, sc, (op-1.0)*100.0)))
+            pl.savefig(joinpath(fig_dir, @sprintf("%s_1_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
 
             pl.figure(fig[1]); fig[1] += 1
             pl.plot(dates, Load,   label="Load")
@@ -363,7 +363,7 @@ function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64},
             pl.xlabel(@sprintf("P [%s]", punit))
             pl.title(@sprintf("%s Storage power inflow: SC=%2.f [%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
             pl.legend()
-            pl.savefig(joinpath(fig_dir, @sprintf("%s_2_%2.f_%3.f.png", title, sc, (op-1.0)*100.0)))
+            pl.savefig(joinpath(fig_dir, @sprintf("%s_2_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
 
             pl.figure(fig[1]); fig[1] += 1
             pl.plot(dates, Load,   label="Load")
@@ -371,7 +371,7 @@ function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64},
             pl.xlabel(@sprintf("P [%s]", punit))
             pl.title(@sprintf("%s Storage power outflow: SC=%2.f [%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
             pl.legend()
-            pl.savefig(joinpath(fig_dir, @sprintf("%s_3_%2.f_%3.f.png", title, sc, (op-1.0)*100.0)))
+            pl.savefig(joinpath(fig_dir, @sprintf("%s_3_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
 
             pl.figure(fig[1]); fig[1] += 1
             pl.plot(dates, Load,   label="Load")
@@ -379,7 +379,7 @@ function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64},
             pl.xlabel(@sprintf("P [%s]", punit))
             pl.title(@sprintf("%s Power import: SC=%2.f[%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
             pl.legend()
-            pl.savefig(joinpath(fig_dir, @sprintf("%s_4_%2.f_%3.f.png", title, sc, (op-1.0)*100.0)))
+            pl.savefig(joinpath(fig_dir, @sprintf("%s_4_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
 
             pl.figure(fig[1]); fig[1] += 1
             pl.plot(dates, Load,   label="Load")
@@ -387,7 +387,7 @@ function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64},
             pl.xlabel(@sprintf("P [%s]", punit))
             pl.title(@sprintf("%s Power curtailment: SC=%2.f %s, op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
             pl.legend()
-            pl.savefig(joinpath(fig_dir, @sprintf("%s_5_%2.f_%3.f.png", title, sc, (op-1.0)*100.0)))
+            pl.savefig(joinpath(fig_dir, @sprintf("%s_5_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
         end
     end
 end
