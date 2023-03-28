@@ -196,7 +196,7 @@ function run_ise_json_to_hdf5(data_dir, download_json_p::Bool, start_year::Int64
     hdf5_path2 = joinpath(data_dir, "ise_power_all_2015-2022.hdf5")
     ise_json_to_hdf5(uts_key, ise_keys_all, data_dir, datafiles, hdf5_path1, hdf5_path2)
 end
-run_ise_json_to_hdf5(get_data_dir(), false, 2015, 2024)
+#run_ise_json_to_hdf5(get_data_dir(), false, 2015, 2024)
 
 """
     load ise energy charts data stored in hdf5 file
