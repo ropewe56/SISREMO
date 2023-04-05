@@ -11,6 +11,7 @@ plt.pygui(:qt5)
 # project root directory
 sisremo_dir = dirname(dirname(@__DIR__))
 get_data_dir() = joinpath(sisremo_dir, "data")
+mkpath(get_data_dir())
 
 """
     download_ise_power_data(data_dir, year)
@@ -29,7 +30,12 @@ function download_ise_power_data(data_dir, year)
         write(out, str)
     end
 end
-#download_ise_power_data(get_data_dir(), 2022)
+function load_all()
+    for year in 2015:2022
+        println(year)
+        download_ise_power_data(get_data_dir(), year)
+    end
+end
 
 function extract_start_end_date(data_dir, year)
     uts_key = "xAxisValues (Unix timestamp)"
@@ -41,7 +47,7 @@ function extract_start_end_date(data_dir, year)
     @info (date_time[1], date_time[end])
     @info get_nb_days(date_time[1], date_time[end])
 end
-#extract_start_end_date(get_data_dir(), 2022)
+#extract_start_end_date(get_data_dir(), year)
 
 """
     download_ise_istalled_power_data()

@@ -27,14 +27,14 @@ function get_step_ΔTh(dates)
     ms/(3.6e6)
 end
 
-function get_nb_years(dates)
+function number_years(dates)
     ΔT_ms_e  = Dates.value(dates[end] - dates[1])
     Δh_e     = ΔT_ms_e/(3.6e6)
     Δh_e/(365*24)
 end
 function powers_to_energy_per_year(dates, P)
     ΔTh = get_step_ΔTh(dates)
-    nb_years = get_nb_years(dates)
+    nb_years = number_years(dates)
     sum(P)*ΔTh/nb_years
 end
 
