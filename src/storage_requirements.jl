@@ -18,8 +18,8 @@ function get_storage_capacities(punit)
     stc2  = [14.0, 26.0, 35.0, 45.0]
     oprod = [1.5, 1.2, 1.15, 1.1, 1.05]
 
-    #stc2  = [26.0]
-    #oprod = [1.2]
+    stc2  = [1.0]
+    oprod = [3.0]
 
     # stc1 < stc2
     stc1 = @. stc2 * 0.1

@@ -27,14 +27,14 @@ function get_step_ΔTh(dates)
     ms/(3.6e6)
 end
 
-function nb_years(dates)
+function get_nb_years(dates)
     ΔT_ms_e  = Dates.value(dates[end] - dates[1])
     Δh_e     = ΔT_ms_e/(3.6e6)
     Δh_e/(365*24)
 end
 function powers_to_energy_per_year(dates, P)
     ΔTh = get_step_ΔTh(dates)
-    nb_years = nb_years(dates)
+    nb_years = get_nb_years(dates)
     sum(P)*ΔTh/nb_years
 end
 
@@ -455,8 +455,8 @@ function comp_and_plot(stc1, stc2, oprod, data_dir, fig_dir, punit; plot_p = fal
         fig = [1]
         plot_powers(dates, Load, RP, 0, fig_dir, punit, fig)
         plot_detrended(dates, RP, RP_de, RP_trend, ΔEL, Load, Load_de, Load_trend, punit, fig_dir, fig, data_are_averaged = false)
-        plot_storage_fill_level(dates, Load_de, RP_de, res1, oprod, "S1", fig_dir, fig, "storage_fill1", eunit, plot_all_p = plot_all_p)
-        plot_storage_fill_level(dates, Load_de, RP_de, res2, oprod, "S2", fig_dir, fig, "storage_fill2", eunit, plot_all_p = plot_all_p)
+        plot_storage_fill_level(dates, Load_de, RP_de, res1, oprod, "S1", fig_dir, fig, "storage_fill1", punit, plot_all_p = plot_all_p)
+        plot_storage_fill_level(dates, Load_de, RP_de, res2, oprod, "S2", fig_dir, fig, "storage_fill2", punit, plot_all_p = plot_all_p)
     end
 end
 
