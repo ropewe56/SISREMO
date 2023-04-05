@@ -22,10 +22,10 @@ function get_storage_capacities(punit)
     oprod = [3.0]
 
     # stc1 < stc2
-    stc1 = @. stc2 * 0.1
+    stc1 = @. stc2 * 0.01
     stc2 = @. stc2 - stc1
 
-    conversion_factor = uconvert("TW", punit) * 0.6
+    conversion_factor = uconvert("TW", punit)# * 0.6
     stc1 = stc1 .* conversion_factor
     stc2 = stc2 .* conversion_factor
 
@@ -34,8 +34,9 @@ end
 
 punit = ["MW", "GW", "TW"][2]
 stc1, stc2, oprod = get_storage_capacities(punit)
+
 plot_p     = [false, true][2]
-plot_all_p = [false, true][2]
+plot_all_p = [false, true][1]
 do_log     = [false, true][1]
 
 comp_and_plot(stc1, stc2, oprod, get_data_dir(), get_fig_dir(), punit, plot_p=plot_p, plot_all_p=plot_all_p, do_log=do_log);
