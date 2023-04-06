@@ -30,12 +30,12 @@ function download_ise_power_data(data_dir, year)
         write(out, str)
     end
 end
-function load_all()
-    for year in 2015:2022
-        println(year)
-        download_ise_power_data(get_data_dir(), year)
+function load_ise_energy_chart_data(data_dir, start_year, end_year)
+    for year in start_year:end_year
+        download_ise_power_data(data_dir, year)
     end
 end
+
 
 function extract_start_end_date(data_dir, year)
     uts_key = "xAxisValues (Unix timestamp)"
@@ -63,6 +63,58 @@ function download_ise_istalled_power_data(data_dir)
         write(out, b)
     end
 end
+#download_ise_istalled_power_data(get_data_dir())
+
+function year_month_to_date(ym)
+    m,y = split(ym, ".")
+    date = DateTime(parse(Int64, y), parse(Int64, m))
+end
+function dates_to_uts(date)
+    floor(Int64, datetime2unix(date))
+end
+
+function name_years(name,  start_year, end_year; ext = nothing)
+    if ext === nothing
+        return @sprintf("%s_%d-%d", name, start_year, end_year)
+    end
+    @sprintf("%s_%d-%d.%s", name, start_year, end_year, ext)
+end
+
+"""
+["Biomass (GW)", "Wind offshore (GW)", "Battery Storage (Capacity) (GWh)", "Wind onshore (GW)", "Battery Storage (Power) (GW)", "months", "Solar (GW)"]
+"""
+function installed_power_to_hdf5(data_dir, start_year, end_year)
+    path = joinpath(data_dir, "installed_power.json")
+    IP = from_json(path)
+
+    dates  = @. year_month_to_date(IP["months"])
+    i1, i2 = 0, 0
+    for (i,d) in enumerate(dates)
+        if d < DateTime(start_year-1,12,31)
+            i1 = i
+        end
+        if d < DateTime(end_year+1,1,1)
+            i2 = i
+        end
+    end
+    i1 += 1
+    dates = dates[i1:i2]
+    println(dates[1], " ", dates[end])
+    months = @. dates_to_uts(dates)
+
+    ip_keys = ["Wind onshore (GW)", "Wind offshore (GW)", "Solar (GW)",  "Biomass (GW)", "Battery Storage (Capacity) (GWh)", "Battery Storage (Power) (GW)"]
+    M = Matrix{Float64}(undef, length(months), length(ip_keys)+1)
+
+    M[:,1] = months
+    for (i,k) in enumerate(ip_keys)
+        data  = @. ifelse(IP[k]  === nothing, 0.0, IP[k])
+        M[:,i+1] = data[i1:i2]
+    end
+    hp = name_years("ise_installed_power", start_year, end_year, ext = "hdf5")
+    hdf5_path = joinpath(data_dir, hp)
+    save_array_as_hdf5(hdf5_path, M, group = "ise_installed_power", dataset = "ise_installed_power", script_dir=false, colm_to_rowm_p = true)
+end
+#installed_power_to_hdf5(get_data_dir(), 2016, 2022)
 
 """
     keys in energy_charts json files
@@ -146,13 +198,7 @@ function ise_json_to_hdf5(uts_key, ise_keys, data_root, datafiles, hdf5_path1, h
     DD = reduce(vcat, D)
 
     # save the single data matrix DD
-    save_array_as_hdf5(hdf5_path2, DD, group = "ise_power", dataset = "ise_power_2015-2022", script_dir=false, colm_to_rowm_p = true)
-end
-
-function load_ise_energy_chart_data(data_dir, start_year, end_year)
-    for year in start_year:end_year
-        download_ise_power_data(data_dir, year)
-    end
+    save_array_as_hdf5(hdf5_path2, DD, group = "ise_power", dataset = "ise_power", script_dir=false, colm_to_rowm_p = true)
 end
 
 """
@@ -191,19 +237,29 @@ function run_ise_json_to_hdf5(data_dir, download_json_p::Bool, start_year::Int64
     end
 
     uts_key    = "xAxisValues (Unix timestamp)"
-    datafiles  = [@sprintf("power_%d.json", y) for y in 2015:2022]
+    datafiles  = [@sprintf("power_%d.json", y) for y in start_year:end_year]
+
     hdf5_path1 = joinpath(data_dir, "ise_power_all.hdf5")
-    hdf5_path2 = joinpath(data_dir, "ise_power_all_2015-2022.hdf5")
+    hp =  @sprintf("ise_power_all_%d-%d.%s", start_year, end_year, ext="hdf5")
+    hdf5_path2 = joinpath(data_dir,hp)
+
     ise_json_to_hdf5(uts_key, ise_keys_all, data_dir, datafiles, hdf5_path1, hdf5_path2)
 end
-#run_ise_json_to_hdf5(get_data_dir(), false, 2015, 2024)
+#run_ise_json_to_hdf5(get_data_dir(), false, 2016, 2022)
 
 """
     load ise energy charts data stored in hdf5 file
 """
-function load_ise_as_hdf5(data_dir)
-    hdf5_path = joinpath(data_dir, "ise_power_all_2015-2022.hdf5")
-    load_array_as_hdf5(hdf5_path, group = "ise_power", dataset = "ise_power_2015-2022", script_dir=false, colm_to_rowm_p = true)
+function load_ise_as_hdf5(data_dir, start_year, end_year)
+    hp = name_years("ise_power_all", start_year, end_year, ext = "hdf5")
+    hdf5_path = joinpath(data_dir, hp)
+    load_array_as_hdf5(hdf5_path, group = "ise_power", dataset = "ise_power", script_dir=false, colm_to_rowm_p = true)
+end
+
+function load_ise_installed_power(data_dir, start_year, end_year)
+    hp = @sprintf("ise_installed_power_%s-%s.hdf5", start_year, end_year)
+    hdf5_path = joinpath(data_dir, hp)
+    load_array_as_hdf5(hdf5_path, group = "ise_installed_power", dataset = "ise_installed_power", script_dir=false, colm_to_rowm_p = true)
 end
 
 function plot_power()
@@ -225,8 +281,9 @@ function plot_power()
 end
 #plot_power()
 
-function installed_power()
-    d = JSON.parsefile(joinpath(root, "ise-data", "istalled.json"), dicttype=DataStructures.OrderedDict, inttype=Int64, use_mmap=true)
+function installed_power(data_dir)
+    jp = name_years("ise_installed_power", start_year, end_year, ext = "json")
+    d = JSON.parsefile(joinpath(data_dir, hp), dicttype=DataStructures.OrderedDict, inttype=Int64, use_mmap=true)
     ms = d["months"]
     dates = map(x -> Date(parse(Int, x[2]), parse(Int,x[1]), 15), split.(ms, "."))
     Date(2012,2,29)

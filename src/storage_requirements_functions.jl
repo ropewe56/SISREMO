@@ -1,5 +1,6 @@
 using Common
 using Statistics
+using Interpolations
 
 import PyPlot as pl
 pl.pygui(true)
@@ -392,15 +393,62 @@ function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64},
     end
 end
 
-function load_data(data_dir, punit)
-    data = EnergyData(data_dir, punit);
+function load_data(data_dir, punit, start_year, end_year; scale_to_installed_power = true)
+    data = PowerData(data_dir, punit, start_year, end_year);
     Load = data.Load
 
-    # renewables is sum of wind onshore, wind offshore and solar
-    RP = @. data.Woff + data.Won + data.Solar;
+    if scale_to_installed_power
+        IP = InstalledPower(data, data_dir, punit, start_year, end_year)
 
-    # Biomass
-    BM = data.Bio
+        plt.figure()
+        plt.plot(data.dates, data.Solar, label="Solar")
+        plt.plot(data.dates, data.Won,   label="Won")
+        plt.plot(data.dates, data.Woff,  label="Woff")
+        plt.plot(data.dates, data.Bio,   label="Bi ")
+        plt.legend()
+        plt.title("EE 1")
+
+        Woff  = @. data.Woff  / IP.Woff  * IP.Woff[end]
+        Won   = @. data.Won   / IP.Won   * IP.Won[end]
+        Solar = @. data.Solar / IP.Solar * IP.Solar[end]
+        Bio   = @. data.Bio   / IP.Bio   * IP.Bio[end]
+
+        plt.figure()
+        plt.plot(data.dates, IP.Solar, label="Solar")
+        plt.plot(data.dates, IP.Won,   label="Won")
+        plt.plot(data.dates, IP.Woff,  label="Woff")
+        plt.plot(data.dates, IP.Bio,   label="Bi ")
+        plt.legend()
+        plt.title("IP")
+
+        plt.figure()
+        plt.plot(data.dates, Solar, label="Solar")
+        plt.plot(data.dates, Won,   label="Won")
+        plt.plot(data.dates, Woff,  label="Woff")
+        plt.plot(data.dates, Bio,   label="Bi ")
+        plt.legend()
+        plt.title("EE 2")
+
+        # renewables is sum of wind onshore, wind offshore and solar
+        RP = @. Woff + Won + Solar + Bio;
+        plt.figure()
+        plt.plot(data.dates, RP)
+        plt.title("RP 1")
+
+        scale = mean(Load) / mean(RP)
+        @infoe mean(Load), mean(RP), scale
+        RP = @. RP * scale
+
+        plt.figure()
+        plt.plot(data.dates, RP)
+        plt.title("RP 2")
+
+        plt.figure()
+        plt.plot(data.dates, Load)
+        plt.title("Load")
+    else
+        RP = @. data.Woff + data.Won + data.Solar + data.Bio;
+    end
 
     # dates
     dates = data.dates
@@ -417,16 +465,15 @@ function load_data(data_dir, punit)
     @infoe @sprintf("RE_de = %8.2e %sh", powers_to_energy_per_year(dates, RP_de  ), punit)
     @infoe @sprintf("LE_de = %8.2e %sh", powers_to_energy_per_year(dates, Load_de), punit)
 
-    dates, Load, RP, RP_de, RP_trend, ΔEL, Load_de, Load_trend, BM
+    dates, Load, RP, RP_de, RP_trend, ΔEL, Load_de, Load_trend
 end
 
 """
     load data and compute and plot storage fille levels, original times (15 min)
 """
-function comp_and_plot(stc1, stc2, oprod, data_dir, fig_dir, punit; plot_p = false, plot_all_p = false, do_log = false)
-
-    dates, Load, RP, RP_de, RP_trend, ΔEL, Load_de, Load_trend, BM = load_data(data_dir, punit)
-    RP_de = RP_de + BM
+function comp_and_plot(stc1, stc2, oprod, data_dir, fig_dir, punit, start_year, stop_year; plot_p = false, plot_all_p = false, do_log = false)
+    dates, Load, RP, RP_de, RP_trend, ΔEL, Load_de, Load_trend = load_data(data_dir, punit, start_year, stop_year)
+    return
 
     (res1, res2, oprod) = compute_storage_fill_level(dates, Load_de, RP_de, punit, stc1, stc2, oprod, do_log = do_log)
     # Vector{(storage_fill, stg1, stg2, sc, op)}
@@ -465,7 +512,7 @@ end
 """
 function comp_and_plot_averaged(data_dir, fig_dir, punit; plot_p = false)
 
-    data = EnergyData(data_dir, punit);
+    data = PowerData(data_dir, punit);
     Load = data.Load
     RP = @. data.Woff + data.Won + data.Solar;
     dates = data.dates
