@@ -10,10 +10,114 @@ include("storage/utils.jl")
 #include("storage/hdf5_utils.jl")
 include("storage/data_energy.jl")
 
+include("plot_results_v2.jl")
+
 root = dirname(@__DIR__)
 get_data_dir()   = joinpath(root, "data")
 get_fig_dir()    = joinpath(root, "figures")
 mkpath(get_fig_dir())
+
+function load_data(data_dir, punit, start_year, end_year; scale_to_installed_power = true, plot_p=false)
+    data = PowerData(data_dir, punit, start_year, end_year);
+    L = data.Load
+
+    local P
+
+    # energy charts
+    P_ec = @. data.Woff + data.Won + data.Solar + data.Bio;
+
+    if scale_to_installed_power
+        IP = InstalledPower(data, data_dir, punit, start_year, end_year)
+
+        md_Woff  = 1.0 / mean(IP.Woff)
+        md_Won   = 1.0 / mean(IP.Won)
+        md_Solar = 1.0 / mean(IP.Solar)
+        md_Bio   = 1.0 / mean(IP.Bio)
+
+        IP_Woff  = @. IP.Woff  * md_Woff
+        IP_Won   = @. IP.Won   * md_Won
+        IP_Solar = @. IP.Solar * md_Solar
+        IP_Bio   = @. IP.Bio   * md_Bio
+
+        Woff  = @. data.Woff  / IP_Woff
+        Won   = @. data.Won   / IP_Won
+        Solar = @. data.Solar / IP_Solar
+        Bio   = @. data.Bio   / IP_Bio
+
+        # renewables is sum of wind onshore, wind offshore and solar
+        P0 = @. Woff + Won + Solar + Bio;
+
+        scale = mean(L) / mean(P0)
+        @infoe mean(L), mean(P0), scale
+        P = @. P0 * scale
+
+        if plot_p
+            plt.figure()
+            plt.plot(data.dates, IP.Solar, label="Solar")
+            plt.plot(data.dates, IP.Won,   label="Won")
+            plt.plot(data.dates, IP.Woff,  label="Woff")
+            plt.plot(data.dates, IP.Bio,   label="Bi ")
+            plt.legend()
+            plt.title("IP 1")
+
+            plt.figure()
+            plt.plot(data.dates, IP_Solar, label="Solar")
+            plt.plot(data.dates, IP_Won,   label="Won")
+            plt.plot(data.dates, IP_Woff,  label="Woff")
+            plt.plot(data.dates, IP_Bio,   label="Bi ")
+            plt.legend()
+            plt.title("IP 2")
+
+            plt.figure()
+            plt.plot(data.dates, data.Solar, label="Solar")
+            plt.plot(data.dates, data.Won,   label="Won")
+            plt.plot(data.dates, data.Woff,  label="Woff")
+            plt.plot(data.dates, data.Bio,   label="Bi ")
+            plt.legend()
+            plt.title("EE 1")
+
+            plt.figure()
+            plt.plot(data.dates, Solar, label="Solar")
+            plt.plot(data.dates, Won,   label="Won")
+            plt.plot(data.dates, Woff,  label="Woff")
+            plt.plot(data.dates, Bio,   label="Bi ")
+            plt.legend()
+            plt.title("EE 2")
+
+            plt.figure()
+            plt.plot(data.dates, P0)
+            plt.title("P 1")
+
+            plt.figure()
+            plt.plot(data.dates, P)
+            plt.title("P 2")
+
+            plt.figure()
+            plt.plot(data.dates, L)
+            plt.title("Load")
+        end
+    else
+        P = @. data.Woff + data.Won + data.Solar + data.Bio;
+    end
+
+    # dates
+    dates = data.dates
+    @infoe @sprintf("start: (%d, %d, %d), stop: (%d, %d, %d)",
+        Dates.day(dates[1]),   Dates.month(dates[1]),   Dates.year(dates[1]),
+        Dates.day(dates[end]), Dates.month(dates[end]), Dates.year(dates[end]))
+
+    # energy-chart data => 15 min time resolution, 1h = 60 * 60 * 1000 ms = 3.6e6 ms
+    @infoe @sprintf("RE = %8.2e %sh", powers_to_energy_per_year(dates, P), punit)
+    @infoe @sprintf("LE = %8.2e %sh", powers_to_energy_per_year(dates, L), punit)
+
+    P_de, P_trend, ΔEL, L_de, L_trend = scale_and_detrend(L, P);
+
+    @infoe @sprintf("RE_de = %8.2e %sh", powers_to_energy_per_year(dates, P_de  ), punit)
+    @infoe @sprintf("LE_de = %8.2e %sh", powers_to_energy_per_year(dates, L_de), punit)
+
+
+    dates, data.Load, L, P_ec, P, P_de, P_trend, ΔEL, L_de, L_trend
+end
 
 """
     get the elapsed time of 1 step
@@ -113,20 +217,24 @@ function write_power_step_to_log(stg::Storage, out, i, j)
         i, j, stg.SF[i], P, L, stg.I2[i], stg.I3[i], stg.I4[i], stg.I5[i], stg.I6[i], stg.I7[i]))
 end
 
-function power_step(stg::Storage, L, P, i; out = nothing)
+function power_step(stg::Storage, L, P, i)
     ΔSC = stg.SC - stg.SF[i-1]
+    k = 0
     if P - L > 0.0
-        I2[i] = L
-        I3[i] = P - L
-        I4[i] = min(I3[i], ΔSC/stg.ηin)
-        stg.SF[i] = stg.SF[i-1] + I4[i]*stg.ηin
-        I5[i] = max(0.0, I3[i]-I4[i])  # curtailment
+        stg.I2[i] = L
+        stg.I3[i] = P - L
+        stg.I4[i] = min(stg.I3[i], ΔSC/stg.ηin)
+        stg.SF[i] = stg.SF[i-1] + stg.I4[i]*stg.ηin
+        stg.I5[i] = max(0.0, stg.I3[i]-stg.I4[i])  # curtailment
+        k = 1
     else
-        I2[i] = P
-        I6[i] = min(stg.SF[i-1] * stg.ηout, L-P)
-        stg.SF[i] = stg.SF[i-1] - I6[i]/stg.ηout
-        I7[i] = L - I2[i] - I6[i]      # residual load
+        stg.I2[i] = P
+        stg.I6[i] = min(stg.SF[i-1] * stg.ηout, L - P)
+        stg.SF[i] = stg.SF[i-1] - stg.I6[i]/stg.ηout
+        stg.I7[i] = L - stg.I2[i] - stg.I6[i]      # residual load
+        k = 2
     end
+    k
 end
 
 """
@@ -141,26 +249,60 @@ end
     over_production  : renewable over production capacity factor, 1.0 is no over production capacity
     storage_capacity : storage capacity
 """
-function compute_storage_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64},
-    st_capacities, oprod::Float64; do_log = false)
+function compute_storage_level(dates::Vector{DateTime}, L::Vector{Float64}, P::Vector{Float64}, st_capacities, oprod::Float64; log_p=false)
 
     # renewable energy over production
-    RP = RP .* oprod
+    P = P .* oprod
 
-    nb_steps  = size(RP, 1)
+    storages = []
+    nb_steps  = size(P, 1)
     for stc in st_capacities
         storage = Storage(stc, nb_steps)
         storage.SF[1] = stc*0.5
         push!(storages, storage)
     end
 
-    for i in 2:n
-        power_step(storages[1], L, P, i, out = out1)
-        for j in 2:length(storages)
-            charge(storages[j], storages[j-1].I7[i], storages[j-1].I5[i], i, out = out2)
+    if log_p
+        out1 = open(joinpath(@__DIR__, "log1.log"), "w")
+        out2 = open(joinpath(@__DIR__, "log2.log"), "w")
+        for i in 2:nb_steps
+            k1 = power_step(storages[1], L[i], P[i], i)
+            write(out1, @sprintf("%3d, %d, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e\n", i, k1, L[i], P[i],
+                storages[1].I2[i],
+                storages[1].I3[i],
+                storages[1].I4[i],
+                storages[1].I5[i],
+                storages[1].I6[i],
+                storages[1].I7[i],
+                storages[1].SF[i],
+                ))
+            for j in 2:length(storages)
+                k2 = power_step(storages[j], storages[j-1].I7[i], storages[j-1].I5[i], i)
+
+                write(out2, @sprintf("%3d, %d, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e\n", i, k2, storages[j-1].I7[i], storages[j-1].I5[i],
+                storages[j].I2[i],
+                storages[j].I3[i],
+                storages[j].I4[i],
+                storages[j].I5[i],
+                storages[j].I6[i],
+                storages[j].I7[i],
+                storages[j].SF[i],
+                ))
+            end
+        end
+        close(out1)
+        close(out2)
+    else
+        for i in 2:nb_steps
+            k1 = power_step(storages[1], L[i], P[i], i)
+            for j in 2:length(storages)
+                k2 = power_step(storages[j], storages[j-1].I7[i], storages[j-1].I5[i], i)
+            end
         end
     end
 
+    sum_I2 = 0.0
+    sum_I6 = 0.0
     for (j, stg) in enumerate(storages)
         direct = sum(stg.I2)
         st_in  = sum(stg.I4)
@@ -169,7 +311,14 @@ function compute_storage_level(dates::Vector{DateTime}, Load::Vector{Float64}, R
         curt   = sum(stg.I5)
         @infoe @sprintf("j = %d, op = %3.1f, SC = %8.2e, SF[end] = %8.2e", j, oprod, stg.SC, stg.SF[end])
         @infoe @sprintf("direct = %8.2e, st_in = %8.2e, st_out = %8.2e, other = %8.2e, curt = %8.2e", direct, st_in, st_out, other, curt)
+
+        sum_I2 += direct
+        sum_I6 += st_out
     end
+    sum_I7 = sum(storages[end].I7)
+    sum_I5 = sum(storages[end].I5)
+
+    @infoe (sum_I2 + sum_I6 + sum_I7), sum_I5
 
     storages
 end
@@ -177,17 +326,15 @@ end
 """
     compute storage fill level for different combinations of storage_capacity and over_production
 """
-function compute_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64}, punit::String, stc1, stc2, oprod; do_log = false)
+function compute_storage_fill_level(dates::Vector{DateTime}, L::Vector{Float64}, P::Vector{Float64}, st_capacities::Vector{Vector{Float64}}, oprod::Vector{Float64})
     @infoe @sprintf("==== compute_storage_fill_level ===================================================================")
 
-    res1 = []
-    res2 = []
-    for (sc1, sc2, op) in zip(stc1, stc2, oprod)
-        stg1, stg2 = compute_storage_level(dates, Load, RP, sc1, sc2, op, do_log = do_log)
-        push!(res1, stg1)
-        push!(res2, stg2)
+    results = []
+    for (i, op) in enumerate(oprod)
+        storages = compute_storage_level(dates, L, P, st_capacities[i], op)
+        push!(results, storages)
     end
-    (res1, res2, oprod)
+    results
 end
 
 """
@@ -208,6 +355,7 @@ function determine_overproduction(dates::Vector{DateTime}, Load::Vector{Float64}
         minS = -1.0
         it = 0
         while minS < 0.0 && it < 50
+
             stg1, stg2 = compute_storage_level(dates, Load, RP, op, stc1, stc2)
 
             min_storage_level1 = minimum(stg1.SF)
@@ -222,306 +370,35 @@ function determine_overproduction(dates::Vector{DateTime}, Load::Vector{Float64}
     pl.plot(overproduction, storage_capacities, "r.")
 end
 
-"""
-    plot_powers(dates, Load, RP, averaging_hours, fig_dir, punit, fig)
-
-    plot Load and RP
-
-    dates - times
-    Load -
-    RP   -
-    averaging_hours - if data are averaged number of hours to avergae over
-    fig_dir - directory where figures are saved to
-    punit - (MW, GW, TW)
-    fig - number of matplotlib figure
-"""
-function plot_powers(dates::Vector{DateTime}, Load_ec::Vector{Float64}, Load::Vector{Float64}, RP_ec::Vector{Float64}, RP::Vector{Float64},
-    averaging_hours::Int64, fig_dir::String, punit::String, fig::Vector{Int64})
-
-    pl.figure(fig[1]); fig[1] += 1
-    pl.plot(dates, Load_ec, label="Load")
-    pl.plot(dates, RP_ec, label="Renewables")
-    pl.xlabel("time")
-    pl.ylabel(@sprintf("P [%s]", punit))
-    pl.grid()
-    pl.title("Energy-Charts data")
-    pl.legend()
-
-    pl.figure(fig[1]); fig[1] += 1
-    pl.plot(dates, RP, label="Renewables")
-    pl.plot(dates, Load, label="Load")
-    pl.xlabel("time")
-    pl.ylabel(@sprintf("P [%s]", punit))
-    pl.grid()
-    pl.title("scaled  data")
-    pl.legend()
-
-    if averaging_hours > 1
-        pl.title(@sprintf("averaged, %d days window", div(averaging_hours,24)))
-        pl.savefig(joinpath(fig_dir, @sprintf("RP_averaged.png")))
-    else
-        @infoe fig_dir
-        pl.savefig(joinpath(fig_dir, @sprintf("RP.png")))
-    end
-end
-
-function plot_detrended(dates::Vector{DateTime}, RP::Vector{Float64}, RP_de::Vector{Float64}, RP_trend::Vector{Float64}, ΔEL::Vector{Float64},
-    Load::Vector{Float64}, Load_de::Vector{Float64}, Load_trend::Vector{Float64},
-    punit ::String, fig_dir::String, fig::Vector{Int64}; data_are_averaged = false)
-
-    label1 = "Load"
-    label2 = "Load_de"
-    path1  = "Load_detrended.png"
-    path2  = "Load_diff_detrended.png"
-    if data_are_averaged
-        label1 = "Load_av"
-        label2 = "Load_av_de"
-        path1  = "Load_av_detrended.png"
-    end
-
-    pl.figure(fig[1]); fig[1] += 1
-    pl.plot(dates, Load      , label = label1)
-    pl.plot(dates, Load_de   , label = label2)
-    pl.plot(dates, Load_trend, "r", linewidth=3, label = "Load_trend")
-    pl.xlabel("time")
-    pl.ylabel(@sprintf("P [%s]", punit))
-    pl.grid()
-    pl.legend()
-    pl.title("Load detrended")
-    pl.savefig(joinpath(fig_dir, path1))
-
-    label1 = "RP"
-    label2 = "RP_de"
-    label3 = "RP_de - Load"
-    path1  = "RP_detrended.png"
-    path2  = "RP_diff_detrended.png"
-    if data_are_averaged
-        label1 = "RP_av"
-        label2 = "RP_av_de"
-        label3 = "RP_av_de - Load_av"
-        path1  = "RP_av_detrended.png"
-        path2  = "RP_av_diff_detrended.png"
-    end
-
-    pl.figure(fig[1]); fig[1] += 1
-    pl.plot(dates, RP      , label = label1)
-    pl.plot(dates, RP_de   , label = label2)
-    pl.plot(dates, RP_trend,  "r", linewidth=3, label = "RP_trend")
-    pl.xlabel("time")
-    pl.ylabel(@sprintf("P [%s]", punit))
-    pl.grid()
-    pl.legend()
-    pl.title("Renewable detrended")
-    pl.savefig(joinpath(fig_dir, path1))
-
-    pl.figure(fig[1]); fig[1] += 1
-    pl.plot(dates, ΔEL, label = label3)
-    pl.xlabel("time")
-    pl.ylabel(@sprintf("(P_E - P_L) [%s]", punit))
-    pl.legend()
-    pl.grid()
-    pl.title("Renewable power - Load")
-    pl.savefig(joinpath(fig_dir, path2))
-end
-
-function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64},
-    storage, oprod, title, fig_dir::String, fig::Vector{Int64}, pngpath::String, punit ::String; plot_all_p = false)
-
-    prozent = "%"
-    pl.figure(fig[1]); fig[1] += 1
-    for (stg, op) in zip(storage, oprod)
-        label = @sprintf("%s storage_cpacity=%2.fh %s, op = %3.f %s", title, stg.SC, punit, (op-1.0)*100.0, prozent)
-        pl.plot(dates, stg.SF, label = label)
-    end
-    pl.xlabel("time")
-    pl.ylabel(@sprintf("storage fill level [%sh]", punit))
-    pl.legend()
-    pl.grid()
-    pl.savefig(joinpath(fig_dir, pngpath.*".png"))
-
-    if plot_all_p
-        for (stg, op) in zip(storage, oprod)
-            sc = stg.SC
-
-            pl.figure(fig[1]); fig[1] += 1
-            pl.plot(dates, RP .* op ,   label="RP")
-            pl.plot(dates, Load,   label="Load")
-            pl.xlabel(@sprintf("P [%s]", punit))
-            pl.title(@sprintf("%s Load, RP: SC=%2.f [%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
-            pl.legend()
-            pl.savefig(joinpath(fig_dir, @sprintf("%s_1_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
-
-            pl.figure(fig[1]); fig[1] += 1
-            pl.plot(dates, Load,   label="Load")
-            pl.plot(dates, stg.IF,   label="IF")
-            pl.xlabel(@sprintf("P [%s]", punit))
-            pl.title(@sprintf("%s Storage power inflow: SC=%2.f [%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
-            pl.legend()
-            pl.savefig(joinpath(fig_dir, @sprintf("%s_2_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
-
-            pl.figure(fig[1]); fig[1] += 1
-            pl.plot(dates, Load,   label="Load")
-            pl.plot(dates, stg.OF,  label="OF")
-            pl.xlabel(@sprintf("P [%s]", punit))
-            pl.title(@sprintf("%s Storage power outflow: SC=%2.f [%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
-            pl.legend()
-            pl.savefig(joinpath(fig_dir, @sprintf("%s_3_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
-
-            pl.figure(fig[1]); fig[1] += 1
-            pl.plot(dates, Load,   label="Load")
-            pl.plot(dates, stg.IM, label="IM")
-            pl.xlabel(@sprintf("P [%s]", punit))
-            pl.title(@sprintf("%s Power import: SC=%2.f[%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
-            pl.legend()
-            pl.savefig(joinpath(fig_dir, @sprintf("%s_4_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
-
-            pl.figure(fig[1]); fig[1] += 1
-            pl.plot(dates, Load,   label="Load")
-            pl.plot(dates, stg.CT, label="CT")
-            pl.xlabel(@sprintf("P [%s]", punit))
-            pl.title(@sprintf("%s Power curtailment: SC=%2.f %s, op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
-            pl.legend()
-            pl.savefig(joinpath(fig_dir, @sprintf("%s_5_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
-        end
-    end
-end
-
-function load_data(data_dir, punit, start_year, end_year; scale_to_installed_power = true, plot_p=false)
-    data = PowerData(data_dir, punit, start_year, end_year);
-    Load = data.Load
-
-    local RP
-
-    # energy charts
-    RP_ec = @. data.Woff + data.Won + data.Solar + data.Bio;
-
-    if scale_to_installed_power
-        IP = InstalledPower(data, data_dir, punit, start_year, end_year)
-
-        md_Woff  = 1.0 / mean(IP.Woff)
-        md_Won   = 1.0 / mean(IP.Won)
-        md_Solar = 1.0 / mean(IP.Solar)
-        md_Bio   = 1.0 / mean(IP.Bio)
-
-        IP_Woff  = @. IP.Woff  * md_Woff
-        IP_Won   = @. IP.Won   * md_Won
-        IP_Solar = @. IP.Solar * md_Solar
-        IP_Bio   = @. IP.Bio   * md_Bio
-
-        Woff  = @. data.Woff  / IP_Woff
-        Won   = @. data.Won   / IP_Won
-        Solar = @. data.Solar / IP_Solar
-        Bio   = @. data.Bio   / IP_Bio
-
-        # renewables is sum of wind onshore, wind offshore and solar
-        RP0 = @. Woff + Won + Solar + Bio;
-
-        scale = mean(Load) / mean(RP0)
-        @infoe mean(Load), mean(RP0), scale
-        RP = @. RP0 * scale
-
-        if plot_p
-            plt.figure()
-            plt.plot(data.dates, IP.Solar, label="Solar")
-            plt.plot(data.dates, IP.Won,   label="Won")
-            plt.plot(data.dates, IP.Woff,  label="Woff")
-            plt.plot(data.dates, IP.Bio,   label="Bi ")
-            plt.legend()
-            plt.title("IP 1")
-
-            plt.figure()
-            plt.plot(data.dates, IP_Solar, label="Solar")
-            plt.plot(data.dates, IP_Won,   label="Won")
-            plt.plot(data.dates, IP_Woff,  label="Woff")
-            plt.plot(data.dates, IP_Bio,   label="Bi ")
-            plt.legend()
-            plt.title("IP 2")
-
-            plt.figure()
-            plt.plot(data.dates, data.Solar, label="Solar")
-            plt.plot(data.dates, data.Won,   label="Won")
-            plt.plot(data.dates, data.Woff,  label="Woff")
-            plt.plot(data.dates, data.Bio,   label="Bi ")
-            plt.legend()
-            plt.title("EE 1")
-
-            plt.figure()
-            plt.plot(data.dates, Solar, label="Solar")
-            plt.plot(data.dates, Won,   label="Won")
-            plt.plot(data.dates, Woff,  label="Woff")
-            plt.plot(data.dates, Bio,   label="Bi ")
-            plt.legend()
-            plt.title("EE 2")
-
-            plt.figure()
-            plt.plot(data.dates, RP0)
-            plt.title("RP 1")
-
-            plt.figure()
-            plt.plot(data.dates, RP)
-            plt.title("RP 2")
-
-            plt.figure()
-            plt.plot(data.dates, Load)
-            plt.title("Load")
-        end
-    else
-        RP = @. data.Woff + data.Won + data.Solar + data.Bio;
-    end
-
-    # dates
-    dates = data.dates
-    @infoe @sprintf("start: (%d, %d, %d), stop: (%d, %d, %d)",
-        Dates.day(dates[1]),   Dates.month(dates[1]),   Dates.year(dates[1]),
-        Dates.day(dates[end]), Dates.month(dates[end]), Dates.year(dates[end]))
-
-    # energy-chart data => 15 min time resolution, 1h = 60 * 60 * 1000 ms = 3.6e6 ms
-    @infoe @sprintf("RE = %8.2e %sh", powers_to_energy_per_year(dates, RP  ), punit)
-    @infoe @sprintf("LE = %8.2e %sh", powers_to_energy_per_year(dates, Load), punit)
-
-    RP_de, RP_trend, ΔEL, Load_de, Load_trend = scale_and_detrend(Load, RP);
-
-    @infoe @sprintf("RE_de = %8.2e %sh", powers_to_energy_per_year(dates, RP_de  ), punit)
-    @infoe @sprintf("LE_de = %8.2e %sh", powers_to_energy_per_year(dates, Load_de), punit)
-
-
-    dates, data.Load, Load, RP_ec, RP, RP_de, RP_trend, ΔEL, Load_de, Load_trend
-end
 
 """
     load data and compute and plot storage fille levels, original times (15 min)
 """
-function comp_and_plot(stc1, stc2, oprod, data_dir, fig_dir, punit, start_year, stop_year; plot_p = false, plot_all_p = false, do_log = false)
+function comp_and_plot(st_capacities, oprod, data_dir, fig_dir, punit, start_year, stop_year; plot_p = false, plot_all_p = false, do_log = false)
 
-    dates, Load_ec, Load,RP_ec, RP, RP_de, RP_trend, ΔEL, Load_de, Load_trend = load_data(data_dir, punit, start_year, stop_year)
+    dates, L_ec, L, P_ec, P, P_de, P_trend, ΔEL, L_de, L_trend = load_data(data_dir, punit, start_year, stop_year)
 
-    (res1, res2, oprod) = compute_storage_fill_level(dates, Load_de, RP_de, punit, stc1, stc2, oprod, do_log = do_log)
+    results = compute_storage_fill_level(dates, L_de, P_de, st_capacities, oprod)
 
-    for (stg1, stg2, op) in zip(res1, res2, oprod)
-        Load_per_year = powers_to_energy_per_year(dates, Load)
-        IF1  = powers_to_energy_per_year(dates, stg1.IF) / Load_per_year
-        OF1  = powers_to_energy_per_year(dates, stg1.OF) / Load_per_year
-        CT1  = powers_to_energy_per_year(dates, stg1.CT) / Load_per_year
-        IM1  = powers_to_energy_per_year(dates, stg1.IM) / Load_per_year
-        IF2  = powers_to_energy_per_year(dates, stg2.IF) / Load_per_year
-        OF2  = powers_to_energy_per_year(dates, stg2.OF) / Load_per_year
-        CT2  = powers_to_energy_per_year(dates, stg2.CT) / Load_per_year
-        IM2  = powers_to_energy_per_year(dates, stg2.IM) / Load_per_year
-        SF1  = stg1.SF[end] / Load_per_year
-        SF2  = stg2.SF[end] / Load_per_year
-
-        @infoe @sprintf("==== comp_and_plot ================================================================================")
-        @infoe @sprintf("op = %3.1f,  sc1 = %10.4e, sc2 = %10.4e, SF1[end] = %8.2e, SF2[end] = %8.2e, Load/y = %8.2e", op, stg1.SC, stg2.SC, stg1.SF[end], stg2.SF[end], Load_per_year)
-        @infoe @sprintf("IF1 = %10.4e, OF1 = %10.4e, IF1-OF1 = %10.4e, SF1[end] = %10.4e, CT1 = %10.4e, IM1 = %10.4e", IF1, OF1,  IF1-OF1, SF1, CT1, IM1)
-        @infoe @sprintf("IF2 = %10.4e, OF2 = %10.4e, IF2-OF2 = %10.4e, SF2[end] = %10.4e, CT2 = %10.4e, IM2 = %10.4e", IF2, OF2,  IF1-OF2, SF2, CT2, IM2)
+    nb_stg = length(results[1])
+    stores = []
+    for j in 1:nb_stg
+        push!(stores, [])
+    end
+    for j in 1:nb_stg
+        for storages in results
+            push!(stores[j], storages[j])
+        end
     end
 
     if plot_p
         fig = [1]
-        plot_powers(dates, Load_ec, Load, RP_ec, RP, 0, fig_dir, punit, fig)
-        plot_detrended(dates, RP, RP_de, RP_trend, ΔEL, Load, Load_de, Load_trend, punit, fig_dir, fig, data_are_averaged = false)
-        plot_storage_fill_level(dates, Load_de, RP_de, res1, oprod, "S1", fig_dir, fig, "storage_fill1", punit, plot_all_p = plot_all_p)
-        plot_storage_fill_level(dates, Load_de, RP_de, res2, oprod, "S2", fig_dir, fig, "storage_fill2", punit, plot_all_p = plot_all_p)
+        plot_powers(dates, L_ec, L, P_ec, P, 0, fig_dir, punit, fig)
+        plot_detrended(dates, P, P_de, P_trend, ΔEL, L, L_de, L_trend, punit, fig_dir, fig, data_are_averaged = false)
+
+        for j in 1:nb_stg
+            plot_storage_fill_level(dates, L_de, P_de, stores[j], oprod, j, fig_dir, fig, punit, plot_all_p = plot_all_p)
+        end
     end
 end
 
