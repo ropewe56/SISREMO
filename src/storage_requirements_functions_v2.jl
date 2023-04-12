@@ -315,9 +315,9 @@ function compute_storage_level(dates::Vector{DateTime}, L::Vector{Float64}, P::V
         sum_I2 += direct
         sum_I6 += st_out
     end
+
     sum_I7 = sum(storages[end].I7)
     sum_I5 = sum(storages[end].I5)
-
     @infoe (sum_I2 + sum_I6 + sum_I7), sum_I5
 
     storages

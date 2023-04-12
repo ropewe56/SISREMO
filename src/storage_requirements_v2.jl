@@ -42,8 +42,8 @@ storage_capacities, oprod = get_storage_capacities(punit)
 
 start_year, stop_year = 2016, 2022
 
-plot_p     = [false, true][1]
-plot_all_p = [false, true][1]
+plot_p     = [false, true][2]
+plot_all_p = [false, true][2]
 do_log     = [false, true][1]
 
 comp_and_plot(storage_capacities, oprod, get_data_dir(), get_fig_dir(), punit, start_year, stop_year, plot_p=plot_p, plot_all_p=plot_all_p, do_log=do_log);
