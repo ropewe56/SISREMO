@@ -41,7 +41,7 @@ function plot_powers(dates::Vector{DateTime}, Load_ec::Vector{Float64}, Load::Ve
     end
 end
 
-function plot_detrended(dates::Vector{DateTime}, RP::Vector{Float64}, RP_de::Vector{Float64}, RP_trend::Vector{Float64}, ΔEL::Vector{Float64},
+function plot_detrended(dates::Vector{DateTime}, P::Vector{Float64}, P_de::Vector{Float64}, P_trend::Vector{Float64}, ΔEL::Vector{Float64},
     Load::Vector{Float64}, Load_de::Vector{Float64}, Load_trend::Vector{Float64},
     punit ::String, fig_dir::String, fig::Vector{Int64}; data_are_averaged = false)
 
@@ -66,23 +66,23 @@ function plot_detrended(dates::Vector{DateTime}, RP::Vector{Float64}, RP_de::Vec
     pl.title("Load detrended")
     pl.savefig(joinpath(fig_dir, path1))
 
-    label1 = "RP"
-    label2 = "RP_de"
-    label3 = "RP_de - Load"
-    path1  = "RP_detrended.png"
-    path2  = "RP_diff_detrended.png"
+    label1 = "P"
+    label2 = "P_de"
+    label3 = "P_de - Load"
+    path1  = "P_detrended.png"
+    path2  = "P_diff_detrended.png"
     if data_are_averaged
-        label1 = "RP_av"
-        label2 = "RP_av_de"
-        label3 = "RP_av_de - Load_av"
-        path1  = "RP_av_detrended.png"
-        path2  = "RP_av_diff_detrended.png"
+        label1 = "P_av"
+        label2 = "P_av_de"
+        label3 = "P_av_de - Load_av"
+        path1  = "P_av_detrended.png"
+        path2  = "P_av_diff_detrended.png"
     end
 
     pl.figure(fig[1]); fig[1] += 1
-    pl.plot(dates, RP      , label = label1)
-    pl.plot(dates, RP_de   , label = label2)
-    pl.plot(dates, RP_trend,  "r", linewidth=3, label = "RP_trend")
+    pl.plot(dates, P      , label = label1)
+    pl.plot(dates, P_de   , label = label2)
+    pl.plot(dates, P_trend,  "r", linewidth=3, label = "P_trend")
     pl.xlabel("time")
     pl.ylabel(@sprintf("P [%s]", punit))
     pl.grid()
@@ -93,15 +93,15 @@ function plot_detrended(dates::Vector{DateTime}, RP::Vector{Float64}, RP_de::Vec
     pl.figure(fig[1]); fig[1] += 1
     pl.plot(dates, ΔEL, label = label3)
     pl.xlabel("time")
-    pl.ylabel(@sprintf("(P_E - P_L) [%s]", punit))
+    pl.ylabel(@sprintf("(P - L) [%s]", punit))
     pl.legend()
     pl.grid()
     pl.title("Renewable power - Load")
     pl.savefig(joinpath(fig_dir, path2))
 end
 
-function plot_storage_fill_level(dates::Vector{DateTime}, L::Vector{Float64}, P::Vector{Float64},
-    storages, oprod, j, fig_dir::String, fig::Vector{Int64}, punit ::String; plot_all_p = false)
+function plot_storage_fill_level(dates::Vector{DateTime}, L_de::Vector{Float64}, P_de::Vector{Float64}, vP_op::Vector{Vector{Float64}},
+                                 storages, oprod, j, fig_dir::String, fig::Vector{Int64}, punit ::String; plot_all_p = false)
 
     title = @sprintf("S_%d", j)
     pngpath = @sprintf("S_%d.png", j)
@@ -120,45 +120,54 @@ function plot_storage_fill_level(dates::Vector{DateTime}, L::Vector{Float64}, P:
     pl.savefig(joinpath(fig_dir, pngpath))
 
     if plot_all_p
-        for (stg, op) in zip(storages, oprod)
+        nb_op =length(oprod)
+        for i in 1:nb_op
+            stg = storages[i]
+            op = oprod[i]
+
             sc = stg.SC
 
             pl.figure(fig[1]); fig[1] += 1
-            pl.plot(dates, P .* op ,   label="RP")
-            pl.plot(dates, L,   label="Load")
-            pl.xlabel(@sprintf("P [%s]", punit))
-            pl.title(@sprintf("%s L, P: SC=%2.f [%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
+            pl.plot(dates, vP_op[i],   label="P")
+            pl.plot(dates, L_de,   label="Load")
+            pl.xlabel(@sprintf("P_op [%s]", punit))
+            pl.ylabel(@sprintf("L [%s]", punit))
+            pl.title(@sprintf("%s L, P_op: SC=%2.f [%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
             pl.legend()
             pl.savefig(joinpath(fig_dir, @sprintf("%s_1_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
 
             pl.figure(fig[1]); fig[1] += 1
-            pl.plot(dates, L,   label="Load")
+            pl.plot(dates, L_de,   label="Load")
             pl.plot(dates, stg.I4,   label="IF")
             pl.xlabel(@sprintf("P [%s]", punit))
+            pl.ylabel(@sprintf("L, I4 [%s]", punit))
             pl.title(@sprintf("%s Storage power inflow: SC=%2.f [%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
             pl.legend()
             pl.savefig(joinpath(fig_dir, @sprintf("%s_2_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
 
             pl.figure(fig[1]); fig[1] += 1
-            pl.plot(dates, L,   label="Load")
-            pl.plot(dates, stg.I6,  label="OF")
+            pl.plot(dates, L_de,   label="Load")
+            pl.plot(dates, stg.I6,  label="I6")
             pl.xlabel(@sprintf("P [%s]", punit))
+            pl.ylabel(@sprintf("L, I6 [%s]", punit))
             pl.title(@sprintf("%s Storage power outflow: SC=%2.f [%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
             pl.legend()
             pl.savefig(joinpath(fig_dir, @sprintf("%s_3_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
 
             pl.figure(fig[1]); fig[1] += 1
-            pl.plot(dates, L,   label="Load")
+            pl.plot(dates, L_de,   label="Load")
             pl.plot(dates, stg.I7, label="IM")
             pl.xlabel(@sprintf("P [%s]", punit))
+            pl.ylabel(@sprintf("L, I7 [%s]", punit))
             pl.title(@sprintf("%s Power import: SC=%2.f[%sh], op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
             pl.legend()
             pl.savefig(joinpath(fig_dir, @sprintf("%s_4_%2.f_%1.f", title, sc, (op-1.0)*100.0)))
 
             pl.figure(fig[1]); fig[1] += 1
-            pl.plot(dates, L,   label="Load")
+            pl.plot(dates, L_de,   label="Load")
             pl.plot(dates, stg.I5, label="CT")
             pl.xlabel(@sprintf("P [%s]", punit))
+            pl.ylabel(@sprintf("L, I5 [%s]", punit))
             pl.title(@sprintf("%s Power curtailment: SC=%2.f %s, op=%3.f %s", title, sc, punit, (op-1.0)*100.0, prozent))
             pl.legend()
             pl.savefig(joinpath(fig_dir, @sprintf("%s_5_%2.f_%1.f", title, sc, (op-1.0)*100.0)))

@@ -17,103 +17,18 @@ get_data_dir()   = joinpath(root, "data")
 get_fig_dir()    = joinpath(root, "figures")
 mkpath(get_fig_dir())
 
-function detrend_times_series(A)
-    n  = length(A)
-    nh = div(n,2)
-    k = 2
-    A_trend = polynomial_fit(A, k)
-    A_de = @. A * A_trend[nh] / A_trend
-    A_de, A_trend
-end
-
-function renewables_scale_and_detrend(data_dir, data, punit, start_year, stop_year)
-    IP = InstalledPower(data, data_dir, punit, start_year, stop_year)
-
-    md_Woff  = 1.0 / mean(IP.Woff)
-    md_Won   = 1.0 / mean(IP.Won)
-    md_Solar = 1.0 / mean(IP.Solar)
-    md_Bio   = 1.0 / mean(IP.Bio)
-
-    IP_Woff  = @. IP.Woff  * md_Woff
-    IP_Won   = @. IP.Won   * md_Won
-    IP_Solar = @. IP.Solar * md_Solar
-    IP_Bio   = @. IP.Bio   * md_Bio
-
-    Woff  = @. data.Woff  / IP_Woff
-    Won   = @. data.Won   / IP_Won
-    Solar = @. data.Solar / IP_Solar
-    Bio   = @. data.Bio   / IP_Bio
-
-    s1 = mean(data.Woff) / mean(Woff)
-    s2 = mean(data.Won)  / mean(Won)
-    s3 = mean(data.Solar)/ mean(Solar)
-    s4 = mean(data.Bio)  / mean(Bio)
-
-    Woff  = detrend_time_series(Woff  .* s1)
-    Won   = detrend_time_series(Won   .* s2)
-    Solar = detrend_time_series(Solar .* s3)
-    Bio   = detrend_time_series(Bio   .* s4)
-
-    L_de = detrend_time_series(data.Load)
-    Dict("Load" => L_de, "Woff" => Woff .* s1, "Wo" => Won .* s2, "Solar" => Solar .* s3, "Bio" => Bio .* s4)
-end
-
-function renewables_detrend(data)
-    Woff  = detrend_time_series(data.Woff )
-    Won   = detrend_time_series(data.Won  )
-    Solar = detrend_time_series(data.Solar)
-    Bio   = detrend_time_series(data.Bio  )
-
-    L_de = detrend_time_series(data.Load)
-    Dict("Load" => L_de, "Woff" => Woff, "Wo" => Won, "Solar" => Solar, "Bio" => Bio)
-end
-
-
-function scale_detrend_print_info(data_ec, data)
-
-    # dates
-    dates = data_ec.dates
-    @infoe @sprintf("start: (%d, %d, %d), stop: (%d, %d, %d)",
-        Dates.day(dates[1]),   Dates.month(dates[1]),   Dates.year(dates[1]),
-        Dates.day(dates[end]), Dates.month(dates[end]), Dates.year(dates[end]))
-
-    # energy-chart data => 15 min time resolution, 1h = 60 * 60 * 1000 ms = 3.6e6 ms
-    @infoe @sprintf("PE = %8.2e %sh", powers_to_energy_per_year(dates, P_ec), punit)
-    @infoe @sprintf("LE = %8.2e %sh", powers_to_energy_per_year(dates, L_ec), punit)
-
-
-    @infoe @sprintf("PE_de = %8.2e %sh", powers_to_energy_per_year(dates, P_de  ), punit)
-    @infoe @sprintf("LE_de = %8.2e %sh", powers_to_energy_per_year(dates, L_de), punit)
-
-    dates, L_ec, L, P_ec, P, P_de, P_trend, ΔEL, L_de, L_trend
-end
-
-function load_data(data_dir, punit, start_year, stop_year; scale_to_installed_power = true, plot_p=false)
-
-    data = PowerData(data_dir, punit, start_year, stop_year);
-    L_ec = data.Load
-    dates = data.dates
-
-    # energy charts
-    P_ec = @. data.Woff + data.Won + data.Solar + data.Bio;
-
-
-    # dates
-    @infoe @sprintf("start: (%d, %d, %d), stop: (%d, %d, %d)",
-        Dates.day(dates[1]),   Dates.month(dates[1]),   Dates.year(dates[1]),
-        Dates.day(dates[end]), Dates.month(dates[end]), Dates.year(dates[end]))
-
-    # energy-chart data => 15 min time resolution, 1h = 60 * 60 * 1000 ms = 3.6e6 ms
-    @infoe @sprintf("PE = %8.2e %sh", powers_to_energy_per_year(dates, P_sc), punit)
-    @infoe @sprintf("LE = %8.2e %sh", powers_to_energy_per_year(dates, L_sc), punit)
-
-    P_de, P_trend, ΔEL, L_de, L_trend = scale_and_detrend(L_ec, P_ec);
-
-    @infoe @sprintf("PE_de = %8.2e %sh", powers_to_energy_per_year(dates, P_de), punit)
-    @infoe @sprintf("LE_de = %8.2e %sh", powers_to_energy_per_year(dates, L_de), punit)
-
-
-    dates, data.Load, L, P_ec, P, P_de, P_trend, ΔEL, L_de, L_trend
+mutable struct Parameter
+    data_dir
+    fig_dir
+    punit
+    start_year
+    stop_year
+    scale_Bio
+    SF1_factor
+    scale_to_installed_power_p
+    plot_p
+    plot_all_p
+    do_log
 end
 
 """
@@ -138,7 +53,7 @@ function number_years(dates)
 end
 
 """
-    ehergy produced per year by power series P
+    energy produced per year by power series P
 """
 function powers_to_energy_per_year(dates, P)
     ΔTh = get_step_ΔTh(dates)
@@ -146,39 +61,110 @@ function powers_to_energy_per_year(dates, P)
     sum(P)*ΔTh/nb_years
 end
 
-"""
-    scale_and_detrend(Load, RP)
-
-    renewable energy RP is scaled such that mean(RP) == mean(Load) over whole time considered (e.g. 2015 - 2022)
-"""
-function scale_and_detrend(Load::Vector{Float64}, RP::Vector{Float64})
-    n = length(Load)
+function detrend_time_series(A)
+    sumA = sum(A)
+    n  = length(A)
     nh = div(n,2)
-
-    # determine trend by fitting data with a k'th order polynomial
     k = 2
+    A_trend = polynomial_fit(A, k)
 
-    # detrend Load
-    Load_trend = polynomial_fit(Load, k)
-    Load_de = @. Load * Load_trend[nh] / Load_trend
+    #A_de = @. A * mean(A_trend) / A_trend
+    A_de = @. A * A_trend[nh] / A_trend
 
-    scale = (mean(Load) / mean(RP))
-    #@infoe @sprintf("(mean(RP) / mean(Load)) = %3.2f", 1.0/scale)
+    sumA_de = sum(A_de)
+    A_de = @. A_de * sumA/sumA_de
 
-    # scale RP
-    RP_sc = @. RP * scale
+    A_de, A_trend
+end
 
-    # detrend RP
-    RP_trend = polynomial_fit(RP_sc, k)
-    RP_de = @. RP_sc * RP_trend[nh] / RP_trend
+function power_scale(L, Wf, Wn, So, B)
+    R  = Wf .+ Wn .+ So
 
-    # scale RP_de using detrended data
-    RP_de_sc = RP_de * mean(Load_de)/mean(RP_de)
+    mean_L = mean(L)
+    mean_B = mean(B)
+    mean_R = mean(R)
 
-    # diff between detrended RP and detrended Load
-    ΔEL = (RP_de_sc - Load_de)
+    # mean_L*op = mean_R * scale + mean_B
+    scale = (mean_L - mean_B) / mean_R
 
-    RP_de_sc, RP_trend, ΔEL, Load_de, Load_trend
+    Wf_sc = Wf .* scale
+    Wn_sc = Wn .* scale
+    So_sc = So .* scale
+
+    P_sc = R .* scale .+ B
+
+    Wf_sc, Wn_sc, So_sc, P_sc
+end
+
+
+struct DetrendedPowers
+    L           :: Vector{Float64}
+    P           :: Vector{Float64}
+    Woff        :: Vector{Float64}
+    Won         :: Vector{Float64}
+    Solar       :: Vector{Float64}
+    Bio         :: Vector{Float64}
+    L_trend     :: Vector{Float64}
+    P_trend     :: Vector{Float64}
+    Woff_trend  :: Vector{Float64}
+    Won_trend   :: Vector{Float64}
+    Solar_trend :: Vector{Float64}
+    Bio_trend   :: Vector{Float64}
+end
+
+function renewables_scale_and_detrend(data_dir, data, punit, start_year, stop_year, scale_Bio)
+
+    IP = InstalledPower(data, data_dir, punit, start_year, stop_year, scale_Bio)
+
+    md_Woff  = 1.0 / mean(IP.Woff)
+    md_Won   = 1.0 / mean(IP.Won)
+    md_Solar = 1.0 / mean(IP.Solar)
+    md_Bio   = 1.0 / mean(IP.Bio)
+
+    IP_Woff  = @. IP.Woff  * md_Woff
+    IP_Won   = @. IP.Won   * md_Won
+    IP_Solar = @. IP.Solar * md_Solar
+    IP_Bio   = @. IP.Bio   * md_Bio
+
+    Woff  = @. data.Woff  / IP_Woff
+    Won   = @. data.Won   / IP_Won
+    Solar = @. data.Solar / IP_Solar
+    Bio   = @. data.Bio   / IP_Bio
+
+    s1 = mean(data.Woff) / mean(Woff)
+    s2 = mean(data.Won)  / mean(Won)
+    s3 = mean(data.Solar)/ mean(Solar)
+    s4 = mean(data.Bio)  / mean(Bio)
+
+    Woff , Woff_trend  = detrend_time_series(Woff  .* s1)
+    Won  , Won_trend   = detrend_time_series(Won   .* s2)
+    Solar, Solar_trend = detrend_time_series(Solar .* s3)
+    Bio  , Bio_trend   = detrend_time_series(Bio   .* s4)
+
+    Wf_sc, Wn_sc, So_sc, P_sc = power_scale(data.Load, Woff, Won, Solar, Bio)
+
+    P_de, P_trend = detrend_time_series(Wf_sc .+ Wn_sc .+ So_sc .+ Bio)
+    L_de, L_trend = detrend_time_series(data.Load)
+
+    sum_L = sum(L_de)
+    sum_P = sum(P_sc)
+    @infoe @sprintf("sum_L = %10.4e, sum_P = %10.4e, sum_L-sum_P = %10.4e", sum_L, sum_P, sum_L-sum_P)
+
+    powers = DetrendedPowers(L_de, P_sc, Wf_sc, Wn_sc, So_sc, Bio, L_trend, P_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend)
+    powers
+end
+
+function renewables_detrend(data)
+    Woff , Woff_trend  = detrend_time_series(data.Woff )
+    Won  , Won_trend   = detrend_time_series(data.Won  )
+    Solar, Solar_trend = detrend_time_series(data.Solar)
+    Bio  , Bio_trend   = detrend_time_series(data.Bio  )
+
+    P_de, P_trend = detrend_time_series(Woff .+ Won .+ Solar .+ Bio)
+    L_de, L_trend = detrend_time_series(data.Load)
+
+    powers = DetrendedPowers(L_de, P_de, Woff, Won, Solar, Bio, L_trend, P_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend)
+    powers
 end
 
 mutable struct Storage
@@ -208,7 +194,6 @@ function write_to_log(stg::Storage, ΔPin, out, i, j)
     B = stg.IF[i] - stg.I6[i] - (stg.SF[i] - stg.SF[i-1])
     write(out, @sprintf("%5d  %d  ΔP = %9.2e, S = %9.2e, I = %9.2e, O = %9.2e, C = %9.2e, M = %9.2e, B = %9.2e\n", i, j, ΔPin, stg.SF[i], stg.IF[i], stg.OF[i], stg.CT[i], stg.RE[i], B))
 end
-
 function write_power_step_to_log(stg::Storage, out, i, j)
     write(out, @sprintf("%5d  %d  P = %9.2e, L = %9.2e, I2 = %9.2e, I3 = %9.2e, I4 = %9.2e, I5 = %9.2e, I6 = %9.2e, I7 = %9.2e\n",
         i, j, stg.SF[i], P, L, stg.I2[i], stg.I3[i], stg.I4[i], stg.I5[i], stg.I6[i], stg.I7[i]))
@@ -235,11 +220,12 @@ function power_step(stg::Storage, L, P, i)
 end
 
 function power_curtailment(powers, op)
-    L  = powers["Load"]
-    B  = powers["Bio"]
-    Wf = powers["Woff"]
-    Wn = powers["Won"]
-    So = powers["Solar"]
+    L  = powers.L
+    Wf = powers.Woff
+    Wn = powers.Won
+    So = powers.Solar
+    B  = powers.Bio
+
     R  = Wf .+ Wn .+ So
 
     mean_L = mean(L)
@@ -248,9 +234,9 @@ function power_curtailment(powers, op)
 
     # mean_L*op = mean_R * scale + mean_B
     scale = (mean_L*op - mean_B) / mean_R
-    P = R .* scale .+ Bio
 
-    L, P
+    P_op = R .* scale .+ B
+    P_op
 end
 
 """
@@ -265,16 +251,17 @@ end
     over_production  : renewable over production capacity factor, 1.0 is no over production capacity
     storage_capacity : storage capacity
 """
-function compute_storage_level(powers, st_capacities, op::Float64; log_p=false)
+function compute_storage_level(powers, st_capacities, op::Float64, SF1_factor; log_p=false)
 
     # curtailment
-    L, P = power_curtailment(powers, op)
+    P_op = power_curtailment(powers, op)
+    L = powers.L
 
     storages = []
-    nb_steps  = size(P, 1)
+    nb_steps  = size(P_op, 1)
     for stc in st_capacities
         storage = Storage(stc, nb_steps)
-        storage.SF[1] = stc*0.5
+        storage.SF[1] = stc*SF1_factor
         push!(storages, storage)
     end
 
@@ -282,7 +269,7 @@ function compute_storage_level(powers, st_capacities, op::Float64; log_p=false)
         out1 = open(joinpath(@__DIR__, "log1.log"), "w")
         out2 = open(joinpath(@__DIR__, "log2.log"), "w")
         for i in 2:nb_steps
-            k1 = power_step(storages[1], L[i], P[i], i)
+            k1 = power_step(storages[1], L[i], P_op[i], i)
 
             write(out1, @sprintf("%3d, %d, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e\n", i, k1, L[i], P[i],
                 storages[1].I2[i],
@@ -311,7 +298,7 @@ function compute_storage_level(powers, st_capacities, op::Float64; log_p=false)
         close(out2)
     else
         for i in 2:nb_steps
-            k1 = power_step(storages[1], L[i], P[i], i)
+            k1 = power_step(storages[1], L[i], P_op[i], i)
             for j in 2:length(storages)
                 k2 = power_step(storages[j], storages[j-1].I7[i], storages[j-1].I5[i], i)
             end
@@ -326,7 +313,7 @@ function compute_storage_level(powers, st_capacities, op::Float64; log_p=false)
         st_out = sum(stg.I6)
         other  = sum(stg.I7)
         curt   = sum(stg.I5)
-        @infoe @sprintf("j = %d, op = %3.1f, SC = %8.2e, SF[end] = %8.2e", j, oprod, stg.SC, stg.SF[end])
+        @infoe @sprintf("j = %d, op = %3.1f, SC = %8.2e, SF[end] = %8.2e", j, op, stg.SC, stg.SF[end])
         @infoe @sprintf("direct = %8.2e, st_in = %8.2e, st_out = %8.2e, other = %8.2e, curt = %8.2e", direct, st_in, st_out, other, curt)
 
         sum_I2 += direct
@@ -335,23 +322,25 @@ function compute_storage_level(powers, st_capacities, op::Float64; log_p=false)
 
     sum_I7 = sum(storages[end].I7)
     sum_I5 = sum(storages[end].I5)
-    @infoe (sum_I2 + sum_I6 + sum_I7), sum_I5
+    @infoe @sprintf("sum_I2_I6_I7 = %10.4e, sum_I5 = %10.4e", (sum_I2 + sum_I6 + sum_I7), sum_I5)
 
-    storages
+    storages, P_op
 end
 
 """
     compute storage fill level for different combinations of storage_capacity and over_production
 """
-function compute_storage_fill_level(powers, st_capacities::Vector{Vector{Float64}}, oprod::Vector{Float64})
+function compute_storage_fill_level(powers, st_capacities::Vector{Vector{Float64}}, oprod::Vector{Float64}, SF1_factor)
     @infoe @sprintf("==== compute_storage_fill_level ===================================================================")
 
     results = []
+    vP_op = Vector{Vector{Float64}}(undef,0)
     for (i, op) in enumerate(oprod)
-        storages = compute_storage_level(powers, st_capacities[i], op)
+        storages, P_op = compute_storage_level(powers, st_capacities[i], op, SF1_factor)
         push!(results, storages)
+        push!(vP_op, P_op)
     end
-    results
+    results, vP_op
 end
 
 """
@@ -391,17 +380,19 @@ end
 """
     load data and compute and plot storage fille levels, original times (15 min)
 """
-function comp_and_plot(st_capacities, oprod, data_dir, fig_dir, punit, start_year, stop_year; plot_p = false, plot_all_p = false, do_log = false, scaled_to_installed_power_p = true)
+function comp_and_plot(st_capacities, oprod, par)
 
-    data_ec = PowerData(data_dir, punit, start_year, stop_year);
+    data_ec = PowerData(par.data_dir, par.punit, par.start_year, par.stop_year, par.scale_Bio);
+    dates = data_ec.dates
+
     local powers
-    if scaled_to_installed_power_p
-        powers = renewables_scale_and_detrend(data_dir, data_ec, punit, start_year, stop_year);
+    if par.scale_to_installed_power_p
+        powers = renewables_scale_and_detrend(par.data_dir, data_ec, par.punit, par.start_year, par.stop_year, par.scale_Bio);
     else
         powers = renewables_detrend(data_ec);
     end
 
-    results = compute_storage_fill_level(powers, st_capacities, oprod)
+    results, vP_op = compute_storage_fill_level(powers, st_capacities, oprod, par.SF1_factor)
 
     nb_stg = length(results[1])
     stores = []
@@ -414,13 +405,19 @@ function comp_and_plot(st_capacities, oprod, data_dir, fig_dir, punit, start_yea
         end
     end
 
-    if plot_p
+    if par.plot_p
         fig = [1]
-        plot_powers(dates, L_ec, L, P_ec, P, 0, fig_dir, punit, fig)
-        plot_detrended(dates, P, P_de, P_trend, ΔEL, L, L_de, L_trend, punit, fig_dir, fig, data_are_averaged = false)
+        L_ec = data_ec.Load
+        P_ec = @. data_ec.Woff + data_ec.Won + data_ec.Solar + data_ec.Bio
+        L_de = powers.L
+        P_de = @. powers.Woff + powers.Won + powers.Solar + powers.Bio
+
+        ΔEL = (P_de - L_de)
+        plot_powers(dates, L_ec, L_de, P_ec, P_de, 0, par.fig_dir, par.punit, fig)
+        plot_detrended(dates, P_ec, P_de, powers.P_trend, ΔEL, L_ec, L_de, powers.L_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
 
         for j in 1:nb_stg
-            plot_storage_fill_level(dates, L_de, P_de, stores[j], oprod, j, fig_dir, fig, punit, plot_all_p = plot_all_p)
+            plot_storage_fill_level(dates, L_de, P_de, vP_op, stores[j], oprod, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
         end
     end
 end

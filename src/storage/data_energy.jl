@@ -77,7 +77,7 @@ end
 
     EnergyData constructor
 """
-function PowerData(data_dir, punit, start_year, end_year)
+function PowerData(data_dir, punit, start_year, end_year, scale_Bio)
     uts_4, Load_4, Woff_4, Won_4, Solar_4, Bio_4, Nuclear_4, dates_4 = PowerData_ise(data_dir, start_year, end_year)
     # energy charts data are in MW, M2 is conversion factor to eunit (MW, GW, TW)
 
@@ -88,7 +88,7 @@ function PowerData(data_dir, punit, start_year, end_year)
     Woff    = average_to_hour(Woff_4)
     Won     = average_to_hour(Won_4)
     Solar   = average_to_hour(Solar_4)
-    Bio     = average_to_hour(Bio_4)
+    Bio     = average_to_hour(Bio_4) .* scale_Bio
     Nuclear = average_to_hour(Nuclear_4)
 
     M2 = uconvert("MW", punit)
@@ -127,8 +127,10 @@ function load_and_iterpolate_installed_power(data_dir, punit, start_year, end_ye
     IP2
 end
 
-function InstalledPower(pd::PowerData, data_dir, punit, start_year, end_year)
+function InstalledPower(pd::PowerData, data_dir, punit, start_year, end_year, scale_Bio)
     IP = load_and_iterpolate_installed_power(data_dir, punit, start_year, end_year, pd.uts)
+    IP[:,4] = IP[:,4] * scale_Bio
+
     Won     = IP[:,1]
     Woff    = IP[:,2]
     Solar   = IP[:,3]
@@ -150,7 +152,7 @@ function InstalledPower(pd::PowerData, data_dir, punit, start_year, end_year)
             push!(B, a)
         end
     end
-    @infoe @sprintf("number rescaled = %d", n_rescaled)
+    @infoe @sprintf("Installed power: # ipmin < 1.0e-10*ipmax = %d", n_rescaled)
     #                      Woff   Won   Sol   Bio   BatCap   BatPow
     InstalledPower(pd.uts, B[2],  B[1], B[3], B[4], B[5], B[6], pd.dates)
 end
