@@ -52,25 +52,25 @@ function power_flow(x, v)
     EfficiencyLoading     = 0.81
     EfficiencyDischarging = 0.926
 
-    C2 = x[1] # Renewable capacity 200 GW
-    C3 = x[2] # Curtailment threshold 10 GW
-    K1 = x[3] # storage energy level v.K[1]
+    C2 = x[1] # Renewable capacity  [GW]
+    C3 = x[2] # Curtailment threshold [GW]
+    K1 = x[3] # storage energy level v.K[1] [GWh]
 
     # v.B demand
     # v.C renewable availbility factor
 
     v.D = v.C .* C2                                 # renewable availability
     v.F = min.(v.D, v.B)                            # renewable generation
-    v.E = v.D - v.F                                 # renewable surplus
-    v.G = v.B - v.F                                 # residual demand
-    v.H = min.(-v.E .+ C3, 0.0)                     # curtailment
-    v.I = v.E - v.H;                                # storage loading
+    v.E = v.D - v.F                                 # renewable surplus = renewable availability - renewable generation
+    v.G = v.B - v.F                                 # residual demand   = demand - renewable generation
+    v.H = min.(C3 .- v.E, 0.0)                      # curtailment       = Curtailment threshold - renewable surplus
+    v.I = v.E - v.H;                                # storage loading   = min(renewable surplus - curtailment, 0.0)
 
     n = length(v.D)
-    v.J = zeros(Float64, n)                         # storage discharging
+    v.J = zeros(Float64, n)                         # storage discharging = min(residual demand, storage energy level * eta_out)
     v.J[1] = 0.0
 
-    v.K = zeros(Float64, n)                         # storage energy level
+    v.K = zeros(Float64, n)                         # storage energy level += storage loading * eta_in -  storage discharging / eta_out
     v.K[1] = K1
 
     for i in 2:n
@@ -85,17 +85,21 @@ function power_flow(x, v)
 end
 
 function constraint1(x1, v)
+    # x1 = Storage energy in GWh
+    # (renewable generation + storage discharging) / renewable availability
     c1 = (sum(v.F) + sum(v.J)) / sum(v.B) - x1 # = 0
     c1
 end
 
 function constraint2(x2, v)
-    c2 = sum(v.H) / sum(v.D) - x2             # <= 0
+    # x2 = Renewable curtailment in per mille or percent
+    # curtailment / renewable availability
+    c2 = sum(v.H) / sum(v.D) - x2              # <= 0
     c2
 end
 
 function constraint3(K1, v)
-    c3 = K1 - v.K[end]                        # = 0
+    c3 = K1 - v.K[end]                         # = 0
     c3
 end
 
@@ -140,23 +144,19 @@ function myfunc(x, g, v)
     return power_flow(x, v)
 end
 
-function optimize_power_flow(x1, x2, v)
+function optimize_power_flow(x0, x1, x2, v)
 
+    # LN_COBYLA, https://github.com/JuliaOpt/NLopt.jl/blob/master/src/NLopt.jl
     opt = Opt(:LN_COBYLA, 3)
     opt.lower_bounds = [0.0, 0.0, 0.0]
     opt.xtol_rel = 1.0e-8
 
     min_objective!(opt, (x,g) -> myfunc(x,g,v))
 
-    #equality_constraint!(opt,   (x, g) -> constraint1(x1,   v), 1e-8)
-    #inequality_constraint!(opt, (x, g) -> constraint2(x2,   v), 1e-8)
-    #equality_constraint!(opt,   (x, g) -> constraint3(x[3], v), 1e-8)
-
     equality_constraint!(opt,   (x, g) -> cconstraint1(x, g, x1,   v), 1.0e-8)
     inequality_constraint!(opt, (x, g) -> cconstraint2(x, g, x2,   v), 1.0e-8)
     equality_constraint!(opt,   (x, g) -> cconstraint3(x, g, x[3], v), 1.0e-8)
 
-    x0 = [200.0, 20.0, 1140.0]
     (minf, minx, ret) = optimize(opt, x0)
 
     numevals = opt.numevals # the number of function evaluations
@@ -164,19 +164,29 @@ function optimize_power_flow(x1, x2, v)
     minf, minx, ret, numevals
 end
 
-# storage energy [GWh]
-x1 = [20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0, 65.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 100.0] .* 1.0e-2;
-# Renewable curtailment [%]
-x2 = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100,
-        110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300, 350, 400, 450, 500] ./ 1000.0;
+# Renewable share
+x1 = collect(LinRange(2.0e-2, 1.0, 10))
+# Renewable curtailment
+x2 = collect(LinRange(0.0, 0.5, 10))
 
 v = load_data();
 
-minf, minx, ret, numevals = optimize_power_flow(x1[end], x2[end], v)
+# C2 = x[1] # Renewable capacity [GW]
+# C3 = x[2] # Curtailment threshold [GW]
+# K1 = x[3] # storage energy level v.K[1]
+x0 = [200.0, 20.0, 1140.0]
+
+minf, minx, ret, numevals = optimize_power_flow(x0, x1[end], x2[end], v)
 
 constraint1(x1[end], v)
 constraint1(x2[end], v)
-constraint3(v.K[1], v)
+constraint3(v.K[1],  v)
 
 #v.K
 sum(v.L)
+sum(v.I)
+sum(v.H)
+
+xx1 = (sum(v.F) + sum(v.J)) / sum(v.B);
+A = (v.F + v.J) / v.B;
+minimum(A), maximum(A)
