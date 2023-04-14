@@ -84,27 +84,44 @@ function power_flow(x, v)
     maximum(v.K)
 end
 
-function constraint1(x, g, x1, v)
+function constraint1(x1, v)
+    c1 = (sum(v.F) + sum(v.J)) / sum(v.B) - x1 # = 0
+    c1
+end
+
+function constraint2(x2, v)
+    c2 = sum(v.H) / sum(v.D) - x2             # <= 0
+    c2
+end
+
+function constraint3(K1, v)
+    c3 = K1 - v.K[end]                        # = 0
+    c3
+end
+
+function cconstraint1(x, g, x1, v)
     function f(x)
         r = power_flow(x, v)
-        x1*1.0e-2 - (sum(v.F) + sum(v.J)) / sum(v.B)
+        (sum(v.F) + sum(v.J)) / sum(v.B) - x1
     end
     if length(g) > 0
         ForwardDiff.gradient!(g, f, x)
     end
     f(x)
 end
-function constraint2(x, g, x2, v)
+
+function cconstraint2(x, g, x2, v)
     function f(x)
         r = power_flow(x, v)
-        x2 - sum(v.H) / sum(v.D)
+        sum(v.H) / sum(v.D) - x2
     end
     if length(g) > 0
         ForwardDiff.gradient!(g, f, x)
     end
     f(x)
 end
-function constraint3(x, g, K1, v)
+
+function cconstraint3(x, g, K1, v)
     function f(x)
         r = power_flow(x, v)
         K1 - v.K[end]
@@ -123,7 +140,6 @@ function myfunc(x, g, v)
     return power_flow(x, v)
 end
 
-
 function optimize_power_flow(x1, x2, v)
 
     opt = Opt(:LN_COBYLA, 3)
@@ -132,31 +148,35 @@ function optimize_power_flow(x1, x2, v)
 
     min_objective!(opt, (x,g) -> myfunc(x,g,v))
 
-    equality_constraint!(opt,   (x, g) -> constraint1(x, g, x1,   v), 1.e-8)
-    inequality_constraint!(opt, (x, g) -> constraint2(x, g, x2,   v), 1.e-8)
-    equality_constraint!(opt,   (x, g) -> constraint3(x, g, x[3], v), 1.e-8)
+    #equality_constraint!(opt,   (x, g) -> constraint1(x1,   v), 1e-8)
+    #inequality_constraint!(opt, (x, g) -> constraint2(x2,   v), 1e-8)
+    #equality_constraint!(opt,   (x, g) -> constraint3(x[3], v), 1e-8)
+
+    equality_constraint!(opt,   (x, g) -> cconstraint1(x, g, x1,   v), 1.0e-8)
+    inequality_constraint!(opt, (x, g) -> cconstraint2(x, g, x2,   v), 1.0e-8)
+    equality_constraint!(opt,   (x, g) -> cconstraint3(x, g, x[3], v), 1.0e-8)
 
     x0 = [200.0, 20.0, 1140.0]
     (minf, minx, ret) = optimize(opt, x0)
 
     numevals = opt.numevals # the number of function evaluations
-    println("got $minf at $minx after $numevals iterations (returned $ret)")
 
-    minf, minx, ret
+    minf, minx, ret, numevals
 end
 
+# storage energy [GWh]
+x1 = [20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0, 65.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 100.0] .* 1.0e-2;
+# Renewable curtailment [%]
+x2 = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100,
+        110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300, 350, 400, 450, 500] ./ 1000.0;
 
 v = load_data();
 
-# storage energy [GWh]
-x1 = [20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0, 65.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 100.0];
+minf, minx, ret, numevals = optimize_power_flow(x1[end], x2[end], v)
 
-# Renewable curtailment [%]
-x2 = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100,
-        110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300, 350, 400, 450, 500] ./ 100.0;
+constraint1(x1[end], v)
+constraint1(x2[end], v)
+constraint3(v.K[1], v)
 
-minf, minx, ret = optimize_power_flow(x1[end], x2[end], v)
-
-x1[end]*1.0e-2 - (sum(v.F) + sum(v.J)) / sum(v.B)
-x2[end] - sum(v.H) / sum(v.D)
-minx[3] - v.K[end]
+#v.K
+sum(v.L)
