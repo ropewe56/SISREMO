@@ -1,6 +1,7 @@
 using CurveFit
 using Dates
 using JSON
+using RWUtils
 
 #macro infoe(message)
 #    fl = string(basename(string(__source__.file)), ":", (__source__.line))
@@ -45,7 +46,7 @@ using JSON
 """
 function polynomial_fit(y, k)
     N = length(y)
-    x = linspace(0.0, Float64(N), N)
+    x = mgrid(0.0, Float64(N), N)
     p = poly_fit(x, y, k)
     yf = p[1]
     for i in 1:k

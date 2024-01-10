@@ -2,7 +2,9 @@ using DataStructures
 using HTTP
 using Dates
 using Printf
-using Common # json io, @ionfoe
+using JSON3
+
+using RWLogger # json io, @ionfoe
 
 import PyPlot as plt
 plt.pygui(true)
@@ -20,8 +22,9 @@ mkpath(get_data_dir())
     year : power data as json is downloaded for year and saved to power_<year>.json
 """
 function download_ise_power_data(data_dir, year)
-    query = [("country" => "DE"), ("start", @sprintf("%s-01-01T00:00Z",year)), ("end", @sprintf("%s-12-31T23:59Z", year))]
+    query = [("country" => "de"), ("start", @sprintf("%s-01-01T00:00Z",year)), ("end", @sprintf("%s-12-31T23:59Z", year))]
     url   = "https://api.energy-charts.info/power"
+    @infoe @sprintf("Download power data: %d", year)
     resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
     str   = String(resp.body)
     path  = joinpath(data_dir, @sprintf("power_%s.json", year))
@@ -47,7 +50,6 @@ function extract_start_end_date(data_dir, year)
     @info (date_time[1], date_time[end])
     @info get_nb_days(date_time[1], date_time[end])
 end
-#extract_start_end_date(get_data_dir(), year)
 
 """
     download_ise_istalled_power_data()
@@ -59,11 +61,15 @@ function download_ise_istalled_power_data(data_dir)
     url   = "https://api.energy-charts.info/installed_power"
     resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
     b     = String(resp.body)
+    bb = JSON3.read(b)
+    for (n,d) in bb["production_types"]
+        @infoe n
+    end
     open(joinpath(data_dir, "installed_power.json"), "w") do out
-        write(out, b)
+        #write(out, b)
+        JSON3.pretty(out, b)
     end
 end
-#download_ise_istalled_power_data(get_data_dir())
 
 function year_month_to_date(ym)
     m,y = split(ym, ".")
@@ -86,8 +92,11 @@ end
 function installed_power_to_hdf5(data_dir, start_year, end_year)
     path = joinpath(data_dir, "installed_power.json")
     IP = from_json(path)
+    for (n,d) in IP["production_types"]
+        @infoe n
+    end
 
-    dates  = @. year_month_to_date(IP["months"])
+    dates  = @. year_month_to_date(IP["time"])
     i1, i2 = 0, 0
     for (i,d) in enumerate(dates)
         if d < DateTime(start_year-1,12,31)
@@ -102,19 +111,31 @@ function installed_power_to_hdf5(data_dir, start_year, end_year)
     println(dates[1], " ", dates[end])
     months = @. dates_to_uts(dates)
 
-    ip_keys = ["Wind onshore (GW)", "Wind offshore (GW)", "Solar (GW)",  "Biomass (GW)", "Battery Storage (Capacity) (GWh)", "Battery Storage (Power) (GW)"]
+    ip_keys = ["Wind onshore", "Wind offshore", "Solar",  "Biomass", "Battery Storage (Capacity)", "Battery Storage (Power)"]
+    #ip_keys = ["Wind onshore (GW)", "Wind offshore (GW)", "Solar (GW)",  "Biomass (GW)", "Battery Storage (Capacity) (GWh)", "Battery Storage (Power) (GW)"]
     M = Matrix{Float64}(undef, length(months), length(ip_keys)+1)
+
+    # [Dict"("name"=>, "data"=>)]
+    PT = IP["production_types"]
 
     M[:,1] = months
     for (i,k) in enumerate(ip_keys)
-        data  = @. ifelse(IP[k]  === nothing, 0.0, IP[k])
-        M[:,i+1] = data[i1:i2]
+        flag = false
+        for p in PT
+            if k == p["name"]
+                data  = @. ifelse(p["data"]  === nothing, 0.0, p["data"])
+                M[:,i+1] = data[i1:i2]
+                flag = true
+            end
+        end
+        if !flag
+            @infoe @sprintf("key %s not in data", k)
+        end
     end
     hp = name_years("ise_installed_power", start_year, end_year, ext = "hdf5")
     hdf5_path = joinpath(data_dir, hp)
-    save_array_as_hdf5(hdf5_path, M, group = "ise_installed_power", dataset = "ise_installed_power", script_dir=false, colm_to_rowm_p = true)
+    save_array_as_hdf5(hdf5_path, M, group_name = "ise_installed_power", dataset_name = "ise_installed_power", script_dir=false, colm_to_rowm_p = true)
 end
-#installed_power_to_hdf5(get_data_dir(), 2016, 2022)
 
 """
     keys in energy_charts json files
@@ -156,10 +177,9 @@ end
 function ise_json_to_hdf5(uts_key, ise_keys, data_root, datafiles, hdf5_path1, hdf5_path2)
     # number of columns
     nk = length(ise_keys)
-    datasets = []
-    # destination of data
-    D = Vector{Array{Float64,2}}(undef, 0)
-
+    # dataset_name, data
+    datasets = Dict{String, Matrix{Float64}}()
+ 
     ntot = 0
     for df in datafiles
         @infoe df
@@ -187,18 +207,18 @@ function ise_json_to_hdf5(uts_key, ise_keys, data_root, datafiles, hdf5_path1, h
                 M[:,i+1] .= 0.0
             end
         end
-        # push Matrix into Vector
-        push!(D, M)
-        push!(datasets, split(splitext(df)[1], "_")[2])
+        name = split(splitext(df)[1], "_")[2]
+        @infoe name, typeof(M)
+        datasets[name] = M
     end
     # save al matrices in a single hdf5file
-    save_arrays_as_hdf5(hdf5_path1, D, group = "ise_power", datasets = datasets, script_dir=false, colm_to_rowm_p = true)
+    save_arrays_as_hdf5(hdf5_path1, datasets, group_name = "ise_power", script_dir=false, colm_to_rowm_p = true)
 
     # concatenate all matrices
-    DD = reduce(vcat, D)
+    DD = reduce(vcat, [d for (n,d) in datasets])
 
     # save the single data matrix DD
-    save_array_as_hdf5(hdf5_path2, DD, group = "ise_power", dataset = "ise_power", script_dir=false, colm_to_rowm_p = true)
+    save_array_as_hdf5(hdf5_path2, DD, group_name = "ise_power", dataset_name = "ise_power", script_dir=false, colm_to_rowm_p = true)
 end
 
 """
@@ -207,7 +227,7 @@ end
     download_json_p : if true downlaod energy_chart data start_year:end_year
 
 """
-function run_ise_json_to_hdf5(data_dir, download_json_p::Bool, start_year::Int64, end_year::Int64)
+function run_ise_json_to_hdf5(data_dir; download_json_p::Bool, start_year::Int64, end_year::Int64)
     ise_keys_all = [
         "Load (MW)",                                #  1
         "Residual load (MW)",                       #  2
@@ -245,7 +265,6 @@ function run_ise_json_to_hdf5(data_dir, download_json_p::Bool, start_year::Int64
 
     ise_json_to_hdf5(uts_key, ise_keys_all, data_dir, datafiles, hdf5_path1, hdf5_path2)
 end
-#run_ise_json_to_hdf5(get_data_dir(), false, 2016, 2022)
 
 """
     load ise energy charts data stored in hdf5 file
@@ -253,13 +272,13 @@ end
 function load_ise_as_hdf5(data_dir, start_year, end_year)
     hp = name_years("ise_power_all", start_year, end_year, ext = "hdf5")
     hdf5_path = joinpath(data_dir, hp)
-    load_array_as_hdf5(hdf5_path, group = "ise_power", dataset = "ise_power", script_dir=false, colm_to_rowm_p = true)
+    load_array_as_hdf5(hdf5_path, group_name = "ise_power", dataset_name = "ise_power", script_dir=false, colm_to_rowm_p = true)
 end
 
 function load_ise_installed_power(data_dir, start_year, end_year)
     hp = @sprintf("ise_installed_power_%s-%s.hdf5", start_year, end_year)
     hdf5_path = joinpath(data_dir, hp)
-    load_array_as_hdf5(hdf5_path, group = "ise_installed_power", dataset = "ise_installed_power", script_dir=false, colm_to_rowm_p = true)
+    load_array_as_hdf5(hdf5_path, group_name = "ise_installed_power", dataset_name = "ise_installed_power", script_dir=false, colm_to_rowm_p = true)
 end
 
 function plot_power()
@@ -309,3 +328,8 @@ function installed_power(data_dir)
     plt.plot(dates, BC , label="BC")
     plt.legend()
 end
+
+# to down laod data from enerycharts and convert to hdf5
+#run_ise_json_to_hdf5(get_data_dir(), download_json_p=false, start_year=2016, end_year=2023)
+#download_ise_istalled_power_data(get_data_dir())
+#installed_power_to_hdf5(get_data_dir(), 2016, 2023)

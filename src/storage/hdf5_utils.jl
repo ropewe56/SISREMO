@@ -22,15 +22,14 @@ function save_array_as_hdf5(hdf5_path::String, C::Array{T,N}; group = "A", datas
         end
     end
 end
-
-function load_array_as_hdf5(hdf5_path; group = "A", dataset = "A", script_dir=false, colm_to_rowm_p = false)
+function load_array_as_hdf5(hdf5_path; group_name = "A", dataset_name = "A", script_dir=false, colm_to_rowm_p = false)
     if script_dir
         hdf5_path = joinpath(@__DIR__, hdf5_path)
     end
     local A
     h5open(hdf5_path, "r") do fid
-        gid = fid[group]
-        A = read(gid[dataset])
+        gid = fid[group_name]
+        A = read(gid[dataset_name])
     end
     if colm_to_rowm_p
         try 

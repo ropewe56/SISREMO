@@ -1,6 +1,8 @@
-using Common
+using RWLogger
+using RWFileIO
 using Statistics
 using Interpolations
+using Printf
 
 import PyPlot as pl
 pl.pygui(true)
@@ -46,7 +48,7 @@ end
 """
     Get the number of years of the time series given by dates
 """
-function number_years(dates)
+function number_of_years(dates)
     ΔT_ms_e  = Dates.value(dates[end] - dates[1])
     Δh_e     = ΔT_ms_e/(3.6e6)
     Δh_e/(365*24)
@@ -57,7 +59,7 @@ end
 """
 function powers_to_energy_per_year(dates, P)
     ΔTh = get_step_ΔTh(dates)
-    nb_years = number_years(dates)
+    nb_years = number_of_years(dates)
     sum(P)*ΔTh/nb_years
 end
 
@@ -77,7 +79,7 @@ function detrend_time_series(A)
     A_de, A_trend
 end
 
-function power_scale(L, Wf, Wn, So, B)
+function scale_power(L, Wf, Wn, So, B)
     R  = Wf .+ Wn .+ So
 
     mean_L = mean(L)
@@ -141,7 +143,7 @@ function renewables_scale_and_detrend(data_dir, data, punit, start_year, stop_ye
     Solar, Solar_trend = detrend_time_series(Solar .* s3)
     Bio  , Bio_trend   = detrend_time_series(Bio   .* s4)
 
-    Wf_sc, Wn_sc, So_sc, P_sc = power_scale(data.Load, Woff, Won, Solar, Bio)
+    Wf_sc, Wn_sc, So_sc, P_sc = scale_power(data.Load, Woff, Won, Solar, Bio)
 
     P_de, P_trend = detrend_time_series(Wf_sc .+ Wn_sc .+ So_sc .+ Bio)
     L_de, L_trend = detrend_time_series(data.Load)
@@ -154,7 +156,7 @@ function renewables_scale_and_detrend(data_dir, data, punit, start_year, stop_ye
     powers
 end
 
-function renewables_detrend(data)
+function detrend_renewables(data)
     Woff , Woff_trend  = detrend_time_series(data.Woff )
     Won  , Won_trend   = detrend_time_series(data.Won  )
     Solar, Solar_trend = detrend_time_series(data.Solar)
@@ -380,7 +382,7 @@ end
 """
     load data and compute and plot storage fille levels, original times (15 min)
 """
-function comp_and_plot(st_capacities, oprod, par)
+function compute_and_plot(st_capacities, oprod, par)
 
     data_ec = PowerData(par.data_dir, par.punit, par.start_year, par.stop_year, par.scale_Bio);
     dates = data_ec.dates
@@ -389,7 +391,7 @@ function comp_and_plot(st_capacities, oprod, par)
     if par.scale_to_installed_power_p
         powers = renewables_scale_and_detrend(par.data_dir, data_ec, par.punit, par.start_year, par.stop_year, par.scale_Bio);
     else
-        powers = renewables_detrend(data_ec);
+        powers = detrend_renewables(data_ec);
     end
 
     results, vP_op = compute_storage_fill_level(powers, st_capacities, oprod, par.SF1_factor)
@@ -425,7 +427,7 @@ end
 """
     load data and compute and plot storage fill levels, data are smoothed using moving averages
 """
-function comp_and_plot_averaged(stc1, stc2, oprod, data_dir, fig_dir, punit, start_year, stop_year; plot_p = false, plot_all_p = false, do_log = false)
+function compute_and_plot_averaged(stc1, stc2, oprod, data_dir, fig_dir, punit, start_year, stop_year; plot_p = false, plot_all_p = false, do_log = false)
     dates, Load, RP_ec, RP, RP_de, RP_trend, ΔEL, Load_de, Load_trend = load_data(data_dir, punit, start_year, stop_year)
 
     averaging_hours = 24*7;

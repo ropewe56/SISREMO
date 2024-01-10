@@ -1,4 +1,4 @@
-using Common
+using RWLogger
 
 import PyPlot as pl
 pl.pygui(true)
@@ -13,7 +13,7 @@ mkpath(get_fig_dir())
 
 #"python.terminal.activateEnvironment": false
 
-function get_storage_capacities(punit, stc, oprod)
+function get_storage_capacities(punit, stc, over_production)
 
     conversion_factor = uconvert("TW", punit)# * 0.6
 
@@ -28,33 +28,35 @@ function get_storage_capacities(punit, stc, oprod)
         push!(storage_capacities, [stc2])
     end
 
-    storage_capacities, oprod
+    storage_capacities, over_production
 end
 
 function make_parameter()
     punit = ["MW", "GW", "TW"][2]
 
-    start_year, stop_year = 2016, 2022
+    start_year, stop_year = 2016, 2023
     scale_Bio  = 1.0
     scale_to_installed_power_p = true
 
-    plot_p     = [false, true][1]
-    plot_all_p = [false, true][1]
+    plot_p     = [false, true][2]
+    plot_all_p = [false, true][2]
     do_log     = [false, true][1]
 
     SF1_factor = 0.5
 
     par = Parameter(get_data_dir(), get_fig_dir(), punit, start_year, stop_year, scale_Bio, SF1_factor, scale_to_installed_power_p, plot_p, plot_all_p, do_log)
 
-    stc   = [14.0, 26.0, 35.0, 45.0]
-    oprod = [1.5, 1.2, 1.15, 1.1, 1.05]
-    stc   = [1.0]
-    oprod = [1.2]
+    stc = [14.0, 26.0, 35.0, 45.0]
+    over_production = [1.5, 1.2, 1.15, 1.1, 1.05]
 
-    storage_capacities, oprod = get_storage_capacities(punit, stc, oprod)
+    stc = [1.0]
+    over_production = [1.2]
 
-    storage_capacities, oprod, par
+    storage_capacities, over_production = get_storage_capacities(punit, stc, over_production)
+
+    storage_capacities, over_production, par
 end
 
-storage_capacities, oprod, par = make_parameter()
-comp_and_plot(storage_capacities, oprod, par);
+storage_capacities, over_production, par = make_parameter()
+compute_and_plot(storage_capacities, over_production, par);
+
