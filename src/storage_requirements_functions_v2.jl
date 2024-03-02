@@ -1,4 +1,4 @@
-using RWLogger
+using CommonUtils
 using RWFileIO
 using Statistics
 using Interpolations
@@ -282,7 +282,11 @@ function compute_storage_level(powers, st_capacities, op::Float64, SF1_factor; l
                 storages[1].I7[i],
                 storages[1].SF[i],
                 ))
-            for j in 2:length(storages)
+
+            nb_strgs = length(storages)
+
+            for j in 2:nb_strgs
+
                 k2 = power_step(storages[j], storages[j-1].I7[i], storages[j-1].I5[i], i)
 
                 write(out2, @sprintf("%3d, %d, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e\n", i, k2, storages[j-1].I7[i], storages[j-1].I5[i],
@@ -301,7 +305,8 @@ function compute_storage_level(powers, st_capacities, op::Float64, SF1_factor; l
     else
         for i in 2:nb_steps
             k1 = power_step(storages[1], L[i], P_op[i], i)
-            for j in 2:length(storages)
+            nb_strgs = length(storages)
+            for j in 2:nb_strgs
                 k2 = power_step(storages[j], storages[j-1].I7[i], storages[j-1].I5[i], i)
             end
         end
@@ -338,6 +343,7 @@ function compute_storage_fill_level(powers, st_capacities::Vector{Vector{Float64
     results = []
     vP_op = Vector{Vector{Float64}}(undef,0)
     for (i, op) in enumerate(oprod)
+        @infoe st_capacities[i], op
         storages, P_op = compute_storage_level(powers, st_capacities[i], op, SF1_factor)
         push!(results, storages)
         push!(vP_op, P_op)
@@ -397,6 +403,7 @@ function compute_and_plot(st_capacities, oprod, par)
     results, vP_op = compute_storage_fill_level(powers, st_capacities, oprod, par.SF1_factor)
 
     nb_stg = length(results[1])
+    @infoe "nb_stg =", nb_stg
     stores = []
     for j in 1:nb_stg
         push!(stores, [])
@@ -419,6 +426,7 @@ function compute_and_plot(st_capacities, oprod, par)
         plot_detrended(dates, P_ec, P_de, powers.P_trend, ΔEL, L_ec, L_de, powers.L_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
 
         for j in 1:nb_stg
+            @infoe j, fig
             plot_storage_fill_level(dates, L_de, P_de, vP_op, stores[j], oprod, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
         end
     end

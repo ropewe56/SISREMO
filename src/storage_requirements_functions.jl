@@ -1,4 +1,4 @@
-using RWLogger
+using CommonUtils
 using RWFileIO
 using Statistics
 using Interpolations
@@ -396,11 +396,12 @@ function plot_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64},
 end
 
 function load_data(data_dir, punit, start_year, end_year; scale_to_installed_power = true)
-    data = PowerData(data_dir, punit, start_year, end_year);
+    scale_Bio = 1.0
+    data = PowerData(data_dir, punit, start_year, end_year, scale_Bio);
     Load = data.Load
 
     if scale_to_installed_power
-        IP = InstalledPower(data, data_dir, punit, start_year, end_year)
+        IP = InstalledPower(data, data_dir, punit, start_year, end_year, scale_Bio)
 
         plt.figure()
         plt.plot(data.dates, data.Solar, label="Solar")

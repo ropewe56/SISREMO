@@ -4,7 +4,7 @@ using Dates
 using Printf
 using JSON3
 
-using RWLogger # json io, @ionfoe
+using CommonUtils # json io, @ionfoe
 
 import PyPlot as plt
 plt.pygui(true)
@@ -272,13 +272,13 @@ end
 function load_ise_as_hdf5(data_dir, start_year, end_year)
     hp = name_years("ise_power_all", start_year, end_year, ext = "hdf5")
     hdf5_path = joinpath(data_dir, hp)
-    load_array_as_hdf5(hdf5_path, group_name = "ise_power", dataset_name = "ise_power", script_dir=false, colm_to_rowm_p = true)
+    load_array_as_hdf5(hdf5_path, group_name = "ise_power", dataset_name = "ise_power", script_dir=false, permute_dims_p = true)
 end
 
 function load_ise_installed_power(data_dir, start_year, end_year)
     hp = @sprintf("ise_installed_power_%s-%s.hdf5", start_year, end_year)
     hdf5_path = joinpath(data_dir, hp)
-    load_array_as_hdf5(hdf5_path, group_name = "ise_installed_power", dataset_name = "ise_installed_power", script_dir=false, colm_to_rowm_p = true)
+    load_array_as_hdf5(hdf5_path, group_name = "ise_installed_power", dataset_name = "ise_installed_power", script_dir=false, permute_dims_p = true)
 end
 
 function plot_power()

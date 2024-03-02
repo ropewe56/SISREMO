@@ -1,4 +1,4 @@
-using RWLogger
+using CommonUtils
 
 import PyPlot as pl
 pl.pygui(true)
@@ -39,18 +39,18 @@ function make_parameter()
     scale_to_installed_power_p = true
 
     plot_p     = [false, true][2]
-    plot_all_p = [false, true][2]
+    plot_all_p = [false, true][1]
     do_log     = [false, true][1]
 
     SF1_factor = 0.5
 
     par = Parameter(get_data_dir(), get_fig_dir(), punit, start_year, stop_year, scale_Bio, SF1_factor, scale_to_installed_power_p, plot_p, plot_all_p, do_log)
 
-    stc = [14.0, 26.0, 35.0, 45.0]
+    stc = [14.0, 26.0, 35.0, 45.0, 55.0]
     over_production = [1.5, 1.2, 1.15, 1.1, 1.05]
 
-    stc = [1.0]
-    over_production = [1.2]
+    #stc = [45.0]
+    #over_production = [1.2]
 
     storage_capacities, over_production = get_storage_capacities(punit, stc, over_production)
 
@@ -59,4 +59,3 @@ end
 
 storage_capacities, over_production, par = make_parameter()
 compute_and_plot(storage_capacities, over_production, par);
-
