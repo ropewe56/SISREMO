@@ -322,27 +322,19 @@ function save_ise_data_to_hdf5(hdf5_name, time_stamps, datasets)
     
     matmat = []
     for (fname, D) in datasets
-        @infoe "--fname"
-        @infoe keys(D)
         ld = length(time_stamps[fname])
         mat = zeros(Float64, ld, maximum(lk)+1)
         mat[:,1] = time_stamps[fname]
         for (prodtype, data) in D
             i = dpr[prodtype]
-            @infoe fname, i, prodtype
+            #@infoe fname, i, prodtype
             mat[:,i+1] = data
         end
         @infoe size(mat)
         push!(matmat, mat)
     end
-
-    @infoe lpr
-    @infoe prs
-    # concatenate all matrices
-    #DD = reduce(vcat, [d for (n,d) in matmat])
     DD = reduce(vcat, matmat)
-    @info size(DD)
-    groups = Dict(@sprintf("%s_2016_2024",hdf5_name) => Dict("data" => DD, "prodtypes" => prs))
+    groups = Dict(@sprintf("%s_2016_2024",hdf5_name) => Dict("data" => DD, "colnames" => prs))
 
     hp =  @sprintf("%s_%d-%d.%s", hdf5_name, start_year, end_year, ext="hdf5")
     hdf5_path2 = joinpath(data_dir,hp)
@@ -355,7 +347,7 @@ function load_ise_data_from_hdf5(hdf5_path)
     groups = load_groups_as_hdf5(hdf5_path; permute_dims_p=true)
     grname = collect(keys(groups))[1]
     data = groups[grname]["data"]
-    prodtypes = groups[grname]["prodtypes"]
+    prodtypes = groups[grname]["colnames"]
     data, prodtypes
 end
 

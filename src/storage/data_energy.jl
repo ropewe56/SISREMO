@@ -1,13 +1,14 @@
-include("data_energy_charts.jl")
+include("ise_energy_charts_data.jl")
 
-using Unitful
-import Unitful.uconvert
+using Dates
+
+using PhysConst.UnitConst
 
 """
     convert units
 """
 function uconvert(efrom::String, eto::String)
-    ut = Dict("MW" => u"MW", "GW" => u"GW", "TW" => u"TW")
+    ut = Dict("MW" => u_MW, GW => u_GW, "TW" => u_TW)
     uf = Dict("MW" => 1u"MW", "GW" => 1u"GW", "TW" => 1u"TW")
     ef = uf[efrom]
     et = ut[eto]
@@ -37,15 +38,25 @@ end
     Nuclear:: Vector{Float64}  # 10
     dates  :: Vector{DateTime} # 11
 """
-function PowerData_ise(data_dir, start_year, end_year)
+function load_ise_public_power(hdf5_path)
     # load data matrix from hdf5 file
-    D = load_ise_as_hdf5(data_dir, start_year, end_year)
+    D, prodtypes = load_ise_data_from_hdf5(hdf5_path)
+    id = Dict()
+    for (i,pr) in enumerate(prodtypes)
+        id[pr] = i+1
+    end
     # Unix time stamps are stored as Float64 in D => to Int
     uts = floor.(Int, D[:,1])
     # convert Unix time stamps to Date objects
     dates = unix2datetime.(uts)
-    # return  uts, Load, Wind off, Wind on, Soalr, Biomass, Nuclear, dates
-    uts, D[:,2], D[:,4], D[:,5], D[:,6], D[:,7],  D[:,15], dates
+    i1 = id["Load"]
+    i2 = id["Wind offshore"]
+    i3 = id["Wind onshore"]
+    i4 = id["Solar"]
+    i5 = id["Biomass"]
+    i6 = id["Nuclear"]
+    # return  uts, 
+    uts, D[:,i1], D[:,i2], D[:,i3], D[:,i4], D[:,i5],  D[:,i6], dates
 end
 
 struct PowerData
@@ -77,8 +88,10 @@ end
 
     EnergyData constructor
 """
-function PowerData(data_dir, punit, start_year, end_year, scale_Bio)
-    uts_4, Load_4, Woff_4, Won_4, Solar_4, Bio_4, Nuclear_4, dates_4 = PowerData_ise(data_dir, start_year, end_year)
+function PowerData(data_dir, punit, start_year, end_year, scale_Bio=1.0)
+
+    hdf5_path = joinpath(data_dir, @sprintf("public_power_%d-%d.hdf5", start_year, end_year))
+    uts_4, Load_4, Woff_4, Won_4, Solar_4, Bio_4, Nuclear_4, dates_4 = load_ise_public_power(hdf5_path)
     # energy charts data are in MW, M2 is conversion factor to eunit (MW, GW, TW)
 
     n = length(Load_4)
@@ -91,7 +104,8 @@ function PowerData(data_dir, punit, start_year, end_year, scale_Bio)
     Bio     = average_to_hour(Bio_4) .* scale_Bio
     Nuclear = average_to_hour(Nuclear_4)
 
-    M2 = uconvert("MW", punit)
+    punit = u_GW
+    M2 = uconvert(u_MW, 1.0*punit)
 
     @infoe @sprintf("# timesteps = %d, energy conversion = %d", length(Load), M2)
 
