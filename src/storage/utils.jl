@@ -1,7 +1,6 @@
 using CurveFit
 using Dates
 using JSON
-using RWUtils
 
 #macro infoe(message)
 #    fl = string(basename(string(__source__.file)), ":", (__source__.line))

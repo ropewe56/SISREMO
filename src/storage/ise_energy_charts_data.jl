@@ -1,18 +1,17 @@
 using DataStructures
+using OrderedCollections
+using DataFrames
 using HTTP
-using Dates
+import Dates
 using Printf
 using JSON3
 
-using CommonUtils # json io, @ionfoe
-
-import PyPlot as plt
-plt.pygui(true)
-plt.pygui(:qt5)
+using BaseUtils
 
 # project root directory
 sisremo_dir = dirname(dirname(@__DIR__))
 get_data_dir() = joinpath(sisremo_dir, "data")
+data_dir = get_data_dir()
 mkpath(get_data_dir())
 
 """
@@ -21,24 +20,24 @@ mkpath(get_data_dir())
     data_dir : directory where to store downloaded json file
     year : power data as json is downloaded for year and saved to power_<year>.json
 """
-function download_ise_power_data(data_dir, year)
+function download_ise_power_data(data_dir, year, get)
     query = [("country" => "de"), ("start", @sprintf("%s-01-01T00:00Z",year)), ("end", @sprintf("%s-12-31T23:59Z", year))]
-    url   = "https://api.energy-charts.info/power"
-    @infoe @sprintf("Download power data: %d", year)
+    url   = "https://api.energy-charts.info/"*get
+    @infoe @sprintf("Download %s: %d", get, year)
     resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
     str   = String(resp.body)
-    path  = joinpath(data_dir, @sprintf("power_%s.json", year))
+    path  = joinpath(data_dir, @sprintf("%s_%s.json", get, year))
     # write String str to path
     open(path, "w") do out
         write(out, str)
     end
+    @infoe @sprintf("saved to %s", path)
 end
-function load_ise_energy_chart_data(data_dir, start_year, end_year)
+function load_ise_energy_chart_data(data_dir, start_year, end_year, get)
     for year in start_year:end_year
-        download_ise_power_data(data_dir, year)
+        download_ise_power_data(data_dir, year, get)
     end
 end
-
 
 function extract_start_end_date(data_dir, year)
     uts_key = "xAxisValues (Unix timestamp)"
@@ -108,7 +107,7 @@ function installed_power_to_hdf5(data_dir, start_year, end_year)
     end
     i1 += 1
     dates = dates[i1:i2]
-    println(dates[1], " ", dates[end])
+    #println(dates[1], " ", dates[end])
     months = @. dates_to_uts(dates)
 
     ip_keys = ["Wind onshore", "Wind offshore", "Solar",  "Biomass", "Battery Storage (Capacity)", "Battery Storage (Power)"]
@@ -137,10 +136,14 @@ function installed_power_to_hdf5(data_dir, start_year, end_year)
     save_array_as_hdf5(hdf5_path, M, group_name = "ise_installed_power", dataset_name = "ise_installed_power", script_dir=false, colm_to_rowm_p = true)
 end
 
+function replace_missing(V::Vector{T}, a::T) where T
+    @. ifelse(V == missing, a, V)
+end
+
 """
     keys in energy_charts json files
 
-    xAxisValues                      [Unix utstamp]
+    unix_seconds                     [Unix utstamp]
     Hydro pumped storage consumption [MW]
     Import Balance                   [MW]
     Nuclear                          [MW]
@@ -164,7 +167,7 @@ end
     Renewable share of generation    [%]
     Renewable share of load          [%]
 
-    ise_json_to_hdf5(uts_key, ise_keys, data_root, hdf5_path1, hdf5_path2)
+    ise_json_to_dict(uts_key, ise_keys, data_root, hdf5_path1, hdf5_path2)
 
     read all power data json files, combine them and store in hdf5 format
 
@@ -174,97 +177,56 @@ end
     hdf5_path1 : data matrices per year are stored in this hdf5 file
     hdf5_path2 : concatenated data matrices are stored as singel matrix in this hdf5 file
 """
-function ise_json_to_hdf5(uts_key, ise_keys, data_root, datafiles, hdf5_path1, hdf5_path2)
-    # number of columns
-    nk = length(ise_keys)
+function ise_json_to_dict(fname, tname, pname, data_dir; start_year::Int64, end_year::Int64)
+    datafiles  = [@sprintf("%s_%d.json", fname, y) for y in start_year:end_year]
+
     # dataset_name, data
-    datasets = Dict{String, Matrix{Float64}}()
- 
-    ntot = 0
+    datasets = OrderedDict{String, Dict{String, Vector{Float64}}}()
+    time_stamps = OrderedDict{String, Vector{Float64}}()
+
+    df = datafiles[1]
     for df in datafiles
-        @infoe df
         # read and parse json
-        path = joinpath(data_root, df)
-        d = from_json(path)
-        # d ise_keys to include
-        @infoe keys(d)
-
-        # length of data vector
-        n = length(d[uts_key])
-        ntot += n
-        # create Matrix
-        M = Matrix{Float64}(undef, n, nk+1)
-        # store Unix utstamps
-        M[:,1] = d[uts_key]
-        # get data and store in Matrix M
-        for (i,k) in enumerate(ise_keys)
-            if haskey(d, ise_keys[i])
-                V = d[ise_keys[i]]
-                V = replace_missing(V,  toreplace = nothing)
-                M[:,i+1] = V
-            else
-                @infoe "no", ise_keys[i]
-                M[:,i+1] .= 0.0
-            end
+        path = joinpath(data_dir, df)
+        d = open(path, "r") do io
+            JSON3.read(io)
         end
-        name = split(splitext(df)[1], "_")[2]
-        @infoe name, typeof(M)
-        datasets[name] = M
+
+        D = OrderedDict{String, Vector{Float64}}()    
+        production_types = d[pname]
+        for prodtype in production_types
+            data = prodtype["data"]
+            V = try
+                Vector{Float64}(data)
+            catch
+                V = Vector{Float64}(undef,0)
+                #@infoe ise_keys[i], typeof(d[ise_keys[i]])
+                for e in data
+                    if typeof(e) == Float64
+                        push!(V, e)
+                    else
+                        push!(V, 0.0)
+                    end
+                end
+                V
+            end
+            D[prodtype["name"]] = V
+        end
+        
+        fname = splitext(df)[1]
+        @infoe fname
+        tt = if eltype(d[tname]) == String
+            [parse(Float64, x) for x in d[tname]]
+        else
+            d[tname]
+        end
+
+        time_stamps[fname] = tt
+        datasets[fname] = D
     end
-    # save al matrices in a single hdf5file
-    save_arrays_as_hdf5(hdf5_path1, datasets, group_name = "ise_power", script_dir=false, colm_to_rowm_p = true)
-
-    # concatenate all matrices
-    DD = reduce(vcat, [d for (n,d) in datasets])
-
-    # save the single data matrix DD
-    save_array_as_hdf5(hdf5_path2, DD, group_name = "ise_power", dataset_name = "ise_power", script_dir=false, colm_to_rowm_p = true)
+    time_stamps, datasets
 end
 
-"""
-    run_ise_json_to_hdf5(download_json_p::Bool, start_year::Int64, end_year::Int64)
-
-    download_json_p : if true downlaod energy_chart data start_year:end_year
-
-"""
-function run_ise_json_to_hdf5(data_dir; download_json_p::Bool, start_year::Int64, end_year::Int64)
-    ise_keys_all = [
-        "Load (MW)",                                #  1
-        "Residual load (MW)",                       #  2
-        "Wind offshore (MW)",                       #  3
-        "Wind onshore (MW)",                        #  4
-        "Solar (MW)",                               #  5
-        "Biomass (MW)",                             #  6
-        "Hydro pumped storage consumption (MW)",    #  7
-        "Hydro water reservoir (MW)",               #  8
-        "Hydro pumped storage (MW)",                #  9
-        "Hydro Run-of-River (MW)",                  # 10
-        "Import Balance (MW)",                      # 11
-        "Geothermal (MW)",                          # 12
-        "Waste (MW)",                               # 13
-        "Nuclear (MW)",                             # 14
-        "Fossil brown coal / lignite (MW)",         # 15
-        "Fossil coal-derived gas (MW)",             # 16
-        "Fossil hard coal (MW)",                    # 17
-        "Fossil oil (MW)",                          # 18
-        "Fossil gas (MW)",                          # 19
-        "Others (MW)",                              # 20
-        "Renewable share of generation (%)",        # 21
-        "Renewable share of load (%)"]              # 22
-
-    if download_json_p
-        load_ise_energy_chart_data(data_dir, start_year, end_year)
-    end
-
-    uts_key    = "xAxisValues (Unix timestamp)"
-    datafiles  = [@sprintf("power_%d.json", y) for y in start_year:end_year]
-
-    hdf5_path1 = joinpath(data_dir, "ise_power_all.hdf5")
-    hp =  @sprintf("ise_power_all_%d-%d.%s", start_year, end_year, ext="hdf5")
-    hdf5_path2 = joinpath(data_dir,hp)
-
-    ise_json_to_hdf5(uts_key, ise_keys_all, data_dir, datafiles, hdf5_path1, hdf5_path2)
-end
 
 """
     load ise energy charts data stored in hdf5 file
@@ -329,7 +291,101 @@ function installed_power(data_dir)
     plt.legend()
 end
 
-# to down laod data from enerycharts and convert to hdf5
-#run_ise_json_to_hdf5(get_data_dir(), download_json_p=false, start_year=2016, end_year=2023)
-#download_ise_istalled_power_data(get_data_dir())
-#installed_power_to_hdf5(get_data_dir(), 2016, 2023)
+function save_ise_data_to_hdf5(hdf5_name, time_stamps, datasets)
+    groups = Dict{String, Dict{String, Vector{Float64}}}()
+    lk = []
+    ld = []
+    prodtypes = OrderedSet{String}()
+    for (fname, D) in datasets
+        group = Dict{String, Vector{Float64}}()
+        group["time_stamp"] = time_stamps[fname]
+        push!(lk, length(keys(D)))
+        for (prodtype, data) in D
+            push!(prodtypes, prodtype)
+            group[prodtype] = data
+            push!(ld, length(data))
+        end
+        groups[fname] = group
+    end
+    hdf5_path1 = joinpath(data_dir, @sprintf("%s_per_year.hdf5", hdf5_name))
+    save_groups_as_hdf5(hdf5_path1, groups; permute_dims_p=false, extension=".hdf5", script_dir=false)
+
+    prodtypes = collect(prodtypes)
+    dpr = OrderedDict()
+    lpr = []
+    for (i, pr) in enumerate(prodtypes)
+        dpr[pr] = i
+        push!(lpr, (i, pr))
+    end
+    sort!(lpr, by=x -> x[1])
+    prs = [a[2] for a in lpr]
+    
+    matmat = []
+    for (fname, D) in datasets
+        @infoe "--fname"
+        @infoe keys(D)
+        ld = length(time_stamps[fname])
+        mat = zeros(Float64, ld, maximum(lk)+1)
+        mat[:,1] = time_stamps[fname]
+        for (prodtype, data) in D
+            i = dpr[prodtype]
+            @infoe fname, i, prodtype
+            mat[:,i+1] = data
+        end
+        @infoe size(mat)
+        push!(matmat, mat)
+    end
+
+    @infoe lpr
+    @infoe prs
+    # concatenate all matrices
+    #DD = reduce(vcat, [d for (n,d) in matmat])
+    DD = reduce(vcat, matmat)
+    @info size(DD)
+    groups = Dict(@sprintf("%s_2016_2024",hdf5_name) => Dict("data" => DD, "prodtypes" => prs))
+
+    hp =  @sprintf("%s_%d-%d.%s", hdf5_name, start_year, end_year, ext="hdf5")
+    hdf5_path2 = joinpath(data_dir,hp)
+    save_groups_as_hdf5(hdf5_path2, groups; permute_dims_p=true, extension=".hdf5", script_dir=false)
+
+    hdf5_path2
+end
+
+function load_ise_data_from_hdf5(hdf5_path)
+    groups = load_groups_as_hdf5(hdf5_path; permute_dims_p=true)
+    grname = collect(keys(groups))[1]
+    data = groups[grname]["data"]
+    prodtypes = groups[grname]["prodtypes"]
+    data, prodtypes
+end
+
+
+"""
+    downlaod data from enerycharts and convert to hdf5
+"""
+function download_ise_data(;download_data = false, start_year=2016, end_year = 2024)
+    if download_data
+        gets = ["public_power", "total_power", "installed_power", "cbpf"]
+        for get in gets
+            load_ise_energy_chart_data(data_dir, start_year, end_year, get)
+        end
+    end
+
+    start_year, end_year = 2016, 2024
+    time_stamps, datasets = ise_json_to_dict("public_power", "unix_seconds", "production_types", get_data_dir(), start_year=2016, end_year=2024);
+    public_power_hdf5_path = save_ise_data_to_hdf5("public_power", time_stamps, datasets)
+    
+    time_stamps, datasets = ise_json_to_dict("total_power", "unix_seconds","production_types",get_data_dir(), start_year=2016, end_year=2024);
+    total_power_hdf5_path = save_ise_data_to_hdf5("total_power", time_stamps, datasets)
+
+    time_stamps, datasets = ise_json_to_dict("installed_power", "time", "production_types", get_data_dir(), start_year=2016, end_year=2024);
+    installed_power_hdf5_path = save_ise_data_to_hdf5("installed_power", time_stamps, datasets)
+
+    time_stamps, datasets = ise_json_to_dict("cbpf", "unix_seconds", "countries", get_data_dir(), start_year=2016, end_year=2024);
+    cbpf_hdf5_path = save_ise_data_to_hdf5("cbpf", time_stamps, datasets)
+
+    data, prodtypes = load_ise_data_from_hdf5(hdf5_path)
+
+end
+download_ise_data(download_data = false, start_year = 2016, end_year =2024)
+
