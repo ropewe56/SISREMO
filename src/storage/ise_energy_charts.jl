@@ -14,40 +14,60 @@ get_data_dir() = joinpath(sisremo_dir, "data")
 data_dir = get_data_dir()
 mkpath(get_data_dir())
 
+function replace_missing(V::Vector{T}, a::T) where T
+    @. ifelse(V == missing, a, V)
+end
+
+function extract_start_end_date(data_dir, year)
+    path = joinpath(data_dir, @sprintf("public_power_%s.json", year))
+    bb = open(path, "r") do io
+        JSON3.read(read(io, String))
+    end
+    uts_key = "unix_seconds"
+
+    date_time = @. unix2datetime(bb[uts_key])
+    @info (date_time[1], date_time[end])
+    @info get_nb_days(date_time[1], date_time[end])
+end
+
+function dates_to_uts(date)
+    floor(Int64, Dates.datetime2unix(date))
+end
+
+function name_years(name,  start_year, end_year; ext = nothing)
+    if ext === nothing
+        return @sprintf("%s_%d-%d", name, start_year, end_year)
+    end
+    @sprintf("%s_%d-%d.%s", name, start_year, end_year, ext)
+end
+
+#####################################
+
 """
     download_ise_power_data(data_dir, year)
 
     data_dir : directory where to store downloaded json file
     year : power data as json is downloaded for year and saved to power_<year>.json
 """
-function download_ise_power_data(data_dir, year, get)
-    query = [("country" => "de"), ("start", @sprintf("%s-01-01T00:00Z",year)), ("end", @sprintf("%s-12-31T23:59Z", year))]
-    url   = "https://api.energy-charts.info/"*get
-    @infoe @sprintf("Download %s: %d", get, year)
+function download_ise_power_data(data_dir, year_, get_)
+    query = [("country" => "de"), ("start", @sprintf("%s-01-01T00:00Z",year_)), ("end", @sprintf("%s-12-31T23:59Z", year_))]
+    url   = "https://api.energy-charts.info/"*get_
+    @infoe @sprintf("Download %s: %d", get_, year_)
     resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
-    str   = String(resp.body)
+    b   = String(resp.body)
+    bb = JSON3.read(b)
     path  = joinpath(data_dir, @sprintf("%s_%s.json", get, year))
-    # write String str to path
-    open(path, "w") do out
-        write(out, str)
+    open(joinpath(data_dir, "installed_power.json"), "w") do out
+        #write(out, b)
+        JSON3.pretty(out, bb)
     end
     @infoe @sprintf("saved to %s", path)
 end
+
 function load_ise_energy_chart_data(data_dir, start_year, end_year, get)
     for year in start_year:end_year
         download_ise_power_data(data_dir, year, get)
     end
-end
-
-function extract_start_end_date(data_dir, year)
-    uts_key = "xAxisValues (Unix timestamp)"
-    path = joinpath(data_dir, @sprintf("power_%s.json", year))
-
-    b = load_json(path)
-
-    date_time = @. unix2datetime(b[uts_key])
-    @info (date_time[1], date_time[end])
-    @info get_nb_days(date_time[1], date_time[end])
 end
 
 """
@@ -59,71 +79,49 @@ function download_ise_istalled_power_data(data_dir)
     query = Dict("country" => "de", "time_step" => "monthly", "installation_decomission" => false)
     url   = "https://api.energy-charts.info/installed_power"
     resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
-    b     = String(resp.body)
+    b = String(resp.body)
     bb = JSON3.read(b)
-    for (n,d) in bb["production_types"]
+    
+    function make_datetime(x)
+        my = split(x, ".")
+        Dates.DateTime(parse(Int64, my[2]), parse(Int64, my[1]))
+    end
+
+    uts = [dates_to_uts(make_datetime(x)) for x in bb["time"]]
+
+    bbb = Dict("unix_seconds" => uts, "production_types" => bb["production_types"])
+    for (n,d) in bbb["production_types"]
         @infoe n
     end
     open(joinpath(data_dir, "installed_power.json"), "w") do out
-        #write(out, b)
-        JSON3.pretty(out, b)
+        JSON3.pretty(out, bbb)
     end
-end
-
-function year_month_to_date(ym)
-    m,y = split(ym, ".")
-    date = DateTime(parse(Int64, y), parse(Int64, m))
-end
-function dates_to_uts(date)
-    floor(Int64, datetime2unix(date))
-end
-
-function name_years(name,  start_year, end_year; ext = nothing)
-    if ext === nothing
-        return @sprintf("%s_%d-%d", name, start_year, end_year)
-    end
-    @sprintf("%s_%d-%d.%s", name, start_year, end_year, ext)
 end
 
 """
 ["Biomass (GW)", "Wind offshore (GW)", "Battery Storage (Capacity) (GWh)", "Wind onshore (GW)", "Battery Storage (Power) (GW)", "months", "Solar (GW)"]
 """
-function installed_power_to_hdf5(data_dir, start_year, end_year)
+function installed_power_to_hdf5(data_dir)
     path = joinpath(data_dir, "installed_power.json")
-    IP = from_json(path)
+    IP = open(path, "r") do io
+        JSON3.read(read(io, String))
+    end
     for (n,d) in IP["production_types"]
         @infoe n
     end
 
-    dates  = @. year_month_to_date(IP["time"])
-    i1, i2 = 0, 0
-    for (i,d) in enumerate(dates)
-        if d < DateTime(start_year-1,12,31)
-            i1 = i
-        end
-        if d < DateTime(end_year+1,1,1)
-            i2 = i
-        end
-    end
-    i1 += 1
-    dates = dates[i1:i2]
-    #println(dates[1], " ", dates[end])
-    months = @. dates_to_uts(dates)
+    uts = IP["unix_seconds"]
+    prodtypes = IP["production_types"]
 
     ip_keys = ["Wind onshore", "Wind offshore", "Solar",  "Biomass", "Battery Storage (Capacity)", "Battery Storage (Power)"]
-    #ip_keys = ["Wind onshore (GW)", "Wind offshore (GW)", "Solar (GW)",  "Biomass (GW)", "Battery Storage (Capacity) (GWh)", "Battery Storage (Power) (GW)"]
-    M = Matrix{Float64}(undef, length(months), length(ip_keys)+1)
+    M = Matrix{Float64}(undef, length(uts), length(ip_keys))
 
-    # [Dict"("name"=>, "data"=>)]
-    PT = IP["production_types"]
-
-    M[:,1] = months
     for (i,k) in enumerate(ip_keys)
         flag = false
-        for p in PT
+        for p in prodtypes
             if k == p["name"]
                 data  = @. ifelse(p["data"]  === nothing, 0.0, p["data"])
-                M[:,i+1] = data[i1:i2]
+                M[:,i] = data
                 flag = true
             end
         end
@@ -131,15 +129,18 @@ function installed_power_to_hdf5(data_dir, start_year, end_year)
             @infoe @sprintf("key %s not in data", k)
         end
     end
-    hp = name_years("ise_installed_power", start_year, end_year, ext = "hdf5")
-    hdf5_path = joinpath(data_dir, hp)
-    save_array_as_hdf5(hdf5_path, M, group_name = "ise_installed_power", dataset_name = "ise_installed_power", script_dir=false, colm_to_rowm_p = true)
+    hdf5_path = joinpath(data_dir, "installed_power.hdf5")
+    groups = Dict("installed_power" => Dict("uts" => uts, "prodtypes" => M))
+    save_groups_as_hdf5(hdf5_path, groups, script_dir=false, permute_dims_p = true)
 end
 
-function replace_missing(V::Vector{T}, a::T) where T
-    @. ifelse(V == missing, a, V)
+function load_installed_power_from_hdf5(hdf5_path)
+    groups = load_groups_as_hdf5(hdf5_path, script_dir=false, permute_dims_p = true)
+    uts = groups["installed_power"]["uts"]
+    prodtypes = groups["installed_power"]["prodtypes"]
+    uts, prodtypes
 end
-
+    
 """
     keys in energy_charts json files
 
@@ -178,7 +179,7 @@ end
     hdf5_path2 : concatenated data matrices are stored as singel matrix in this hdf5 file
 """
 function ise_json_to_dict(fname, tname, pname, data_dir; start_year::Int64, end_year::Int64)
-    datafiles  = [@sprintf("%s_%d.json", fname, y) for y in start_year:end_year]
+    datafiles = [@sprintf("%s_%d.json", fname, y) for y in start_year:end_year]
 
     # dataset_name, data
     datasets = OrderedDict{String, Dict{String, Vector{Float64}}}()
@@ -226,23 +227,6 @@ function ise_json_to_dict(fname, tname, pname, data_dir; start_year::Int64, end_
     end
     time_stamps, datasets
 end
-
-
-#"""
-#    load ise energy charts data stored in hdf5 file
-#"""
-#function load_ise_as_hdf5(data_dir, start_year, end_year)
-#    hp = name_years("ise_power_all", start_year, end_year, ext = "hdf5")
-#    hdf5_path = joinpath(data_dir, hp)
-#    load_array_as_hdf5(hdf5_path, group_name = "ise_power", dataset_name = "ise_power", script_dir=false, permute_dims_p = true)
-#end
-#
-#function load_ise_installed_power(data_dir, start_year, end_year)
-#    hp = @sprintf("ise_installed_power_%s-%s.hdf5", start_year, end_year)
-#    hdf5_path = joinpath(data_dir, hp)
-#    data, prodtypes = load_ise_data_from_hdf5(hdf5_path)
-#    data, prodtypes
-#end
 
 function plot_power()
     uts = floor.(Int, D[:,1])
@@ -331,7 +315,7 @@ function save_ise_data_to_hdf5(hdf5_name, time_stamps, datasets, start_year, end
             #@infoe fname, i, prodtype
             mat[:,i+1] = data
         end
-        @infoe size(mat)
+        #@infoe size(mat)
         push!(matmat, mat)
     end
     DD = reduce(vcat, matmat)
@@ -352,7 +336,6 @@ function load_ise_data_from_hdf5(hdf5_path)
     data, prodtypes
 end
 
-
 """
     downlaod data from enerycharts and convert to hdf5
 """
@@ -371,11 +354,12 @@ function download_ise_data(;download_data = false, start_year=2016, end_year = 2
     time_stamps, datasets = ise_json_to_dict("total_power", "unix_seconds","production_types",get_data_dir(), start_year=2016, end_year=2024);
     total_power_hdf5_path = save_ise_data_to_hdf5("total_power", time_stamps, datasets, start_year, end_year)
 
-    time_stamps, datasets = ise_json_to_dict("installed_power", "time", "production_types", get_data_dir(), start_year=2016, end_year=2024);
-    installed_power_hdf5_path = save_ise_data_to_hdf5("installed_power", time_stamps, datasets, start_year, end_year)
-
     time_stamps, datasets = ise_json_to_dict("cbpf", "unix_seconds", "countries", get_data_dir(), start_year=2016, end_year=2024);
     cbpf_hdf5_path = save_ise_data_to_hdf5("cbpf", time_stamps, datasets, start_year, end_year)
-end
-#download_ise_data(download_data = false, start_year = 2016, end_year =2024)
 
+    download_ise_istalled_power_data(data_dir)
+    installed_power_to_hdf5(data_dir)
+end
+#start_year = 2016
+#end_year = 2024
+#download_ise_data(download_data = false, start_year = 2016, end_year =2024)

@@ -112,9 +112,9 @@ struct DetrendedPowers
     Bio_trend   :: Vector{Float64}
 end
 
-function renewables_scale_and_detrend(data_dir, data, punit, start_year, stop_year, scale_Bio)
+function renewables_scale_and_detrend(data_dir, data, punit, scale_Bio)
 
-    IP = InstalledPower(data, data_dir, punit, start_year, stop_year, scale_Bio)
+    IP = InstalledPower(data, data_dir, punit, scale_Bio)
 
     md_Woff  = 1.0 / mean(IP.Woff)
     md_Won   = 1.0 / mean(IP.Won)
@@ -393,7 +393,7 @@ function compute_and_plot(st_capacities, oprod, par)
 
     local powers
     if par.scale_to_installed_power_p
-        powers = renewables_scale_and_detrend(par.data_dir, data_ec, par.punit, par.start_year, par.stop_year, par.scale_Bio);
+        powers = renewables_scale_and_detrend(par.data_dir, data_ec, par.punit, par.scale_Bio);
     else
         powers = detrend_renewables(data_ec);
     end
@@ -422,7 +422,7 @@ function compute_and_plot(st_capacities, oprod, par)
         ΔEL = (P_de - L_de)
         plot_powers(dates, L_ec, L_de, P_ec, P_de, 0, par.fig_dir, par.punit, fig)
         plot_detrended(dates, P_ec, P_de, powers.P_trend, ΔEL, L_ec, L_de, powers.L_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
-
+        
         for j in 1:nb_stg
             @infoe j, fig
             plot_storage_fill_level(dates, L_de, P_de, vP_op, stores[j], oprod, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)

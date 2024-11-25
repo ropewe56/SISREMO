@@ -12,7 +12,7 @@
     fig - number of matplotlib figure
 """
 function plot_powers(dates::Vector{DateTime}, Load_ec::Vector{Float64}, Load::Vector{Float64}, RP_ec::Vector{Float64}, RP::Vector{Float64},
-    averaging_hours::Int64, fig_dir::String, punit::String, fig::Vector{Int64})
+                        averaging_hours::Int64, fig_dir::String, punit, fig::Vector{Int64})
 
     pl.figure(fig[1]); fig[1] += 1
     pl.plot(dates, Load_ec, label="Load")
@@ -42,8 +42,8 @@ function plot_powers(dates::Vector{DateTime}, Load_ec::Vector{Float64}, Load::Ve
 end
 
 function plot_detrended(dates::Vector{DateTime}, P::Vector{Float64}, P_de::Vector{Float64}, P_trend::Vector{Float64}, ΔEL::Vector{Float64},
-    Load::Vector{Float64}, Load_de::Vector{Float64}, Load_trend::Vector{Float64},
-    punit ::String, fig_dir::String, fig::Vector{Int64}; data_are_averaged = false)
+                        Load::Vector{Float64}, Load_de::Vector{Float64}, Load_trend::Vector{Float64},
+                        punit, fig_dir::String, fig::Vector{Int64}; data_are_averaged = false)
 
     label1 = "Load"
     label2 = "Load_de"
@@ -101,7 +101,7 @@ function plot_detrended(dates::Vector{DateTime}, P::Vector{Float64}, P_de::Vecto
 end
 
 function plot_storage_fill_level(dates::Vector{DateTime}, L_de::Vector{Float64}, P_de::Vector{Float64}, vP_op::Vector{Vector{Float64}},
-                                 storages, oprod, j, fig_dir::String, fig::Vector{Int64}, punit ::String; plot_all_p = false)
+                                 storages, oprod, j, fig_dir::String, fig::Vector{Int64}, punit; plot_all_p = false)
 
     title = @sprintf("S_%d", j)
     pngpath = @sprintf("S_%d.png", j)
