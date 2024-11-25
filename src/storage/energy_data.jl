@@ -145,22 +145,42 @@ function load_ise_installed_power(hdf5_path)
 end
 
 function load_and_iterpolate_installed_power(data_dir, punit, start_year, end_year, uts_data)
+    IP = load_ise_installed_power(data_dir, start_year, end_year)
+    uts_ip = IP[:,1]
+    n_ip = size(IP, 2) - 1
+
+    n_uts = length(uts_data)
+
+    M2 = uconvert("GW", punit)
+
+    IP2 = Matrix{Float64}(undef, n_uts, n_ip)
+    for i in 1:n_ip
+        interp_linear_extrap = linear_interpolation(uts_ip, IP[:,i+1], extrapolation_bc=Line())
+        IP2[:,i] = interp_linear_extrap(uts_data) .* M2
+    end
+
+    IP2
+end
+
+function load_and_iterpolate_installed_power(data_dir, punit, start_year, end_year, uts_pubpower)
     hp = @sprintf("installed_power_%s-%s.hdf5", start_year, end_year)
     hdf5_path = joinpath(data_dir, hp)
-    uts, dates, installed_power = load_ise_installed_power(hdf5_path)
-    n_uts = length(uts)
+    uts_instpower, dates, installed_power = load_ise_installed_power(hdf5_path)
+
+    n_uts = length(uts_pubpower)
+    n_ip = size(installed_power,2)
 
     #Woff, Won, Solar, Bio, BatCap, BatPow = installed_power
 
     GW_to_unit = uconversion_factor(u_GW, 1.0*punit)
 
-    IP2 = Matrix{Float64}(undef, n_uts, n_ip)
+    installed_power2 = Matrix{Float64}(undef, n_uts, n_ip)
     for i in 1:n_ip
-        interp_linear_extrap = linear_interpolation(uts_ip, installed_power[:,i], extrapolation_bc=Line())
-        installed_power[:,i] = interp_linear_extrap(uts) .* GW_to_unit
+        interp_linear_extrap = linear_interpolation(uts_instpower, installed_power[:,i], extrapolation_bc=Line())
+        installed_powe2[:,i] = interp_linear_extrap(uts_pubpower) .* GW_to_unit
     end
 
-    installed_power
+    installed_power2
 end
 
 function InstalledPower(pd::PowerData, data_dir, punit, start_year, end_year, scale_Bio)
