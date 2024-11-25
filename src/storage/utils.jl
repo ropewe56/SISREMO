@@ -1,42 +1,5 @@
 using CurveFit
 using Dates
-using JSON
-
-#macro infoe(message)
-#    fl = string(basename(string(__source__.file)), ":", (__source__.line))
-#    return :( @printf("[ Info: %s | %s\n", $fl, $(esc(message))) )
-#end
-
-#linspace(a, b, n) = collect(LinRange(a, b, n))
-
-#"""
-#    unix utstamp vergangene Sekunden seit Donnerstag, 1. Januar 1970, 00:00 Uhr UTC.
-#    date -u -d @1234567890
-#    "2021-01-01T17:00Z" >= T-time=17:00, Z=UTC
-#"""
-#uts2date(uts)  = @. unix2datetime(uts)
-#date2uts(date) = @. floor(Int64, datetime2unix(date))
-#
-#date2ymwdhms(dt) = year(dt), month(dt), week(dt), day(dt), hour(dt), minute(dt), second(dt)
-#
-#"""
-#    JSON write
-#"""
-#function to_json(path::String, d)
-#    open(path, "w") do out
-#        JSON.print(out, d, 4)
-#    end
-#end
-#"""
-#    JSON read
-#"""
-#function from_json2(path)
-#    open(path, "r") do ein
-#        d = read(ein, String)
-#        return JSON.parse(d)
-#    end
-#end
-
 
 """
     polynomial_fit(y, k)
@@ -168,8 +131,8 @@ function average_data(Load, EE, dates, averaging_hours)
     Load_avme, dates_avme = averaging_mean(Load, dates, averaging_hours)
     EE_avme,   dates_avme = averaging_mean(EE, dates, averaging_hours)
 
-    Load_avmo = moving_average(Load, averaging_hours)
-    EE_avmo   = moving_average(EE, averaging_hours)
+    Load_avmo = moving_average(Load, dates_avme, averaging_hours)
+    EE_avmo   = moving_average(EE, dates_avme, averaging_hours)
 
     Load_avme, Load_avmo, EE_avme, EE_avmo, dates_avme
 end

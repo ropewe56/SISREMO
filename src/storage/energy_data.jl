@@ -1,4 +1,4 @@
-include("ise_energy_charts_data.jl")
+include("ise_energy_charts.jl")
 
 using Dates
 
@@ -7,12 +7,17 @@ using PhysConst.UnitConst
 """
     convert units
 """
-function uconvert(efrom::String, eto::String)
-    ut = Dict("MW" => u_MW, GW => u_GW, "TW" => u_TW)
-    uf = Dict("MW" => 1u"MW", "GW" => 1u"GW", "TW" => 1u"TW")
+function uconversion_factor(efrom::String, eto::String)
+    ut = Dict("MW" =>  u_MW, "GW" =>  u_GW, "TW" =>  u_TW)
+    uf = Dict("MW" => 1u_MW, "GW" => 1u_GW, "TW" => 1u_TW)
     ef = uf[efrom]
     et = ut[eto]
-    c = Float64(getproperty(uconvert(et, ef), :val))
+    Float64(getproperty(uconvert(et, ef), :val))
+end
+
+function uconversion_factor(eto, efrom)
+    @infoe eto, efrom
+    Float64(getproperty(uconvert(eto, efrom), :val))
 end
 
 """
@@ -60,26 +65,18 @@ function load_ise_public_power(hdf5_path)
 end
 
 struct PowerData
-    uts     :: Vector{Int64}    # 1
-    Load    :: Vector{Float64}  # 2
-    Woff    :: Vector{Float64}  # 3
-    Won     :: Vector{Float64}  # 4
-    Solar   :: Vector{Float64}  # 5
-    Bio     :: Vector{Float64}  # 6
-    Nuclear :: Vector{Float64}  # 10
-    dates   :: Vector{DateTime} # 11
+    dates   :: Vector{DateTime} # 1
+    uts     :: Vector{Int64}    # 2
+    Load    :: Vector{Float64}  # 3
+    Woff    :: Vector{Float64}  # 4
+    Won     :: Vector{Float64}  # 5
+    Solar   :: Vector{Float64}  # 6
+    Bio     :: Vector{Float64}  # 7
+    Nuclear :: Vector{Float64}  # 8
 end
 
-
 function average_to_hour(X)
-    n = size(X,1)
-    #m = div(n, 4)
-    #Y = zeros(Float64, m)
-    #j = 1
-    #for i in 1:m
-    #    Y[i] = (X[j] + X[j+1] + X[j+2] + X[j+3]) * 0.25
-    #    j += 4
-    #end
+    n = length(X)
     @. (X[1:4:n-3] + X[2:4:n-2] + X[3:4:n-1] + X[4:4:n]) * 0.25
 end
 
@@ -92,53 +89,78 @@ function PowerData(data_dir, punit, start_year, end_year, scale_Bio=1.0)
 
     hdf5_path = joinpath(data_dir, @sprintf("public_power_%d-%d.hdf5", start_year, end_year))
     uts_4, Load_4, Woff_4, Won_4, Solar_4, Bio_4, Nuclear_4, dates_4 = load_ise_public_power(hdf5_path)
-    # energy charts data are in MW, M2 is conversion factor to eunit (MW, GW, TW)
+    
+    # energy charts data are in MW, MW_to_unit is conversion factor to eunit (MW, GW, TW)
 
     n = length(Load_4)
     uts     = uts_4[1:4:n]
     dates   = dates_4[1:4:n]
-    Load    = average_to_hour(Load_4)
-    Woff    = average_to_hour(Woff_4)
-    Won     = average_to_hour(Won_4)
-    Solar   = average_to_hour(Solar_4)
-    Bio     = average_to_hour(Bio_4) .* scale_Bio
-    Nuclear = average_to_hour(Nuclear_4)
 
-    punit = u_GW
-    M2 = uconvert(u_MW, 1.0*punit)
+    MW_to_unit = uconversion_factor(u_MW, 1.0*punit)
+    Load    = average_to_hour(Load_4) .* MW_to_unit
+    Woff    = average_to_hour(Woff_4) .* MW_to_unit
+    Won     = average_to_hour(Won_4) .* MW_to_unit
+    Solar   = average_to_hour(Solar_4) .* MW_to_unit
+    Bio     = average_to_hour(Bio_4) .* scale_Bio .* MW_to_unit
+    Nuclear = average_to_hour(Nuclear_4) .* MW_to_unit
 
-    @infoe @sprintf("# timesteps = %d, energy conversion = %d", length(Load), M2)
 
-    PowerData(uts, Load .* M2, Woff .* M2, Won .* M2, Solar .* M2, Bio .* M2, Nuclear .* M2, dates)
+    @infoe @sprintf("# timesteps = %d, energy conversion = %d", length(Load), MW_to_unit)
+
+    PowerData(dates, uts, Load, Woff, Won, Solar, Bio, Nuclear)
 end
 
 struct InstalledPower
-    uts     :: Vector{Int64}    # 1
+    dates   :: Vector{DateTime} # 1
+    uts     :: Vector{Int64}    # 2
     Woff    :: Vector{Float64}  # 3
     Won     :: Vector{Float64}  # 4
     Solar   :: Vector{Float64}  # 5
     Bio     :: Vector{Float64}  # 6
     BatCap  :: Vector{Float64}  # 7
     BatPow  :: Vector{Float64}  # 8
-    dates   :: Vector{DateTime} # 9
+end
+
+function load_ise_installed_power(hdf5_path)
+    # load data matrix from hdf5 file
+    D, prodtypes = load_ise_data_from_hdf5(hdf5_path)
+    @infoe prodtypes
+
+    id = Dict()
+    for (i,pr) in enumerate(prodtypes)
+        id[pr] = i+1
+    end
+    # Unix time stamps are stored as Float64 in D => to Int
+    uts = floor.(Int, D[:,1])
+    # convert Unix time stamps to Date objects
+    dates = unix2datetime.(uts)
+    i1 = id["Wind offshore"]
+    i2 = id["Wind onshore"]
+    i3 = id["Solar"]
+    i4 = id["Biomass"]
+    i5 = id["Battery Storage (Capacity)"]
+    i6 = id["Battery Storage (Power)"]
+    # return  uts, 
+    dates, uts, (D[:,i1], D[:,i2], D[:,i3], D[:,i4], D[:,i5],  D[:,i6])
 end
 
 function load_and_iterpolate_installed_power(data_dir, punit, start_year, end_year, uts_data)
-    IP = load_ise_installed_power(data_dir, start_year, end_year)
-    uts_ip = IP[:,1]
-    n_ip = size(IP, 2) - 1
+    hp = @sprintf("installed_power_%s-%s.hdf5", start_year, end_year)
+    hdf5_path = joinpath(data_dir, hp)
+    uts, dates, installed_power = load_ise_installed_power(hdf5_path)
+    n_uts = length(uts)
 
-    n_uts = length(uts_data)
+    #Woff, Won, Solar, Bio, BatCap, BatPow = installed_power
 
-    M2 = uconvert("GW", punit)
+    GW_to_unit = uconversion_factor(u_GW, 1.0*punit)
 
     IP2 = Matrix{Float64}(undef, n_uts, n_ip)
     for i in 1:n_ip
-        interp_linear_extrap = linear_interpolation(uts_ip, IP[:,i+1], extrapolation_bc=Line())
-        IP2[:,i] = interp_linear_extrap(uts_data) .* M2
+        interp_linear_extrap = linear_interpolation(uts_ip, installed_power[:,i], extrapolation_bc=Line())
+        installed_power[:,i] = interp_linear_extrap(uts) .* GW_to_unit
     end
 
-    IP2
+    installed_power
 end
 
 function InstalledPower(pd::PowerData, data_dir, punit, start_year, end_year, scale_Bio)

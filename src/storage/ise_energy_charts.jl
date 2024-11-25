@@ -228,20 +228,21 @@ function ise_json_to_dict(fname, tname, pname, data_dir; start_year::Int64, end_
 end
 
 
-"""
-    load ise energy charts data stored in hdf5 file
-"""
-function load_ise_as_hdf5(data_dir, start_year, end_year)
-    hp = name_years("ise_power_all", start_year, end_year, ext = "hdf5")
-    hdf5_path = joinpath(data_dir, hp)
-    load_array_as_hdf5(hdf5_path, group_name = "ise_power", dataset_name = "ise_power", script_dir=false, permute_dims_p = true)
-end
-
-function load_ise_installed_power(data_dir, start_year, end_year)
-    hp = @sprintf("ise_installed_power_%s-%s.hdf5", start_year, end_year)
-    hdf5_path = joinpath(data_dir, hp)
-    load_array_as_hdf5(hdf5_path, group_name = "ise_installed_power", dataset_name = "ise_installed_power", script_dir=false, permute_dims_p = true)
-end
+#"""
+#    load ise energy charts data stored in hdf5 file
+#"""
+#function load_ise_as_hdf5(data_dir, start_year, end_year)
+#    hp = name_years("ise_power_all", start_year, end_year, ext = "hdf5")
+#    hdf5_path = joinpath(data_dir, hp)
+#    load_array_as_hdf5(hdf5_path, group_name = "ise_power", dataset_name = "ise_power", script_dir=false, permute_dims_p = true)
+#end
+#
+#function load_ise_installed_power(data_dir, start_year, end_year)
+#    hp = @sprintf("ise_installed_power_%s-%s.hdf5", start_year, end_year)
+#    hdf5_path = joinpath(data_dir, hp)
+#    data, prodtypes = load_ise_data_from_hdf5(hdf5_path)
+#    data, prodtypes
+#end
 
 function plot_power()
     uts = floor.(Int, D[:,1])
@@ -291,7 +292,7 @@ function installed_power(data_dir)
     plt.legend()
 end
 
-function save_ise_data_to_hdf5(hdf5_name, time_stamps, datasets)
+function save_ise_data_to_hdf5(hdf5_name, time_stamps, datasets, start_year, end_year)
     groups = Dict{String, Dict{String, Vector{Float64}}}()
     lk = []
     ld = []
@@ -365,19 +366,16 @@ function download_ise_data(;download_data = false, start_year=2016, end_year = 2
 
     start_year, end_year = 2016, 2024
     time_stamps, datasets = ise_json_to_dict("public_power", "unix_seconds", "production_types", get_data_dir(), start_year=2016, end_year=2024);
-    public_power_hdf5_path = save_ise_data_to_hdf5("public_power", time_stamps, datasets)
+    public_power_hdf5_path = save_ise_data_to_hdf5("public_power", time_stamps, datasets, start_year, end_year)
     
     time_stamps, datasets = ise_json_to_dict("total_power", "unix_seconds","production_types",get_data_dir(), start_year=2016, end_year=2024);
-    total_power_hdf5_path = save_ise_data_to_hdf5("total_power", time_stamps, datasets)
+    total_power_hdf5_path = save_ise_data_to_hdf5("total_power", time_stamps, datasets, start_year, end_year)
 
     time_stamps, datasets = ise_json_to_dict("installed_power", "time", "production_types", get_data_dir(), start_year=2016, end_year=2024);
-    installed_power_hdf5_path = save_ise_data_to_hdf5("installed_power", time_stamps, datasets)
+    installed_power_hdf5_path = save_ise_data_to_hdf5("installed_power", time_stamps, datasets, start_year, end_year)
 
     time_stamps, datasets = ise_json_to_dict("cbpf", "unix_seconds", "countries", get_data_dir(), start_year=2016, end_year=2024);
-    cbpf_hdf5_path = save_ise_data_to_hdf5("cbpf", time_stamps, datasets)
-
-    data, prodtypes = load_ise_data_from_hdf5(hdf5_path)
-
+    cbpf_hdf5_path = save_ise_data_to_hdf5("cbpf", time_stamps, datasets, start_year, end_year)
 end
-download_ise_data(download_data = false, start_year = 2016, end_year =2024)
+#download_ise_data(download_data = false, start_year = 2016, end_year =2024)
 

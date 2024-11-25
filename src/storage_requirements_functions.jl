@@ -9,7 +9,7 @@ pl.pygui(:qt5)
 
 include("storage/utils.jl")
 #include("storage/hdf5_utils.jl")
-include("storage/data_energy.jl")
+include("storage/energy_data.jl")
 
 root = dirname(@__DIR__)
 get_data_dir()   = joinpath(root, "data")

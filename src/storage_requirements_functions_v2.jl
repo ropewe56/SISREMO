@@ -8,8 +8,7 @@ pl.pygui(true)
 pl.pygui(:qt5)
 
 include("storage/utils.jl")
-#include("storage/hdf5_utils.jl")
-include("storage/data_energy.jl")
+include("storage/energy_data.jl")
 
 include("plot_results_v2.jl")
 

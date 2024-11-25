@@ -13,9 +13,16 @@ mkpath(get_fig_dir())
 
 #"python.terminal.activateEnvironment": false
 
+"""
+    get_storage_capacities(punit, stc, over_production)
+
+    punit - power unit
+    stc - storage capacity in MWh
+    over_production
+"""
 function get_storage_capacities(punit, stc, over_production)
 
-    conversion_factor = uconvert("TW", punit)# * 0.6
+    conversion_factor = uconversion_factor(u_TW, punit)
 
     storage_capacities = Vector{Vector{Float64}}(undef, 0)
     for sc in stc
@@ -31,10 +38,9 @@ function get_storage_capacities(punit, stc, over_production)
     storage_capacities, over_production
 end
 
-function make_parameter()
-    punit = ["MW", "GW", "TW"][2]
+function make_parameter(;start_year = 2016, stop_year = 2024)
+    punit = [1u_MW, 1u_GW, 1u_TW][2]
 
-    start_year, stop_year = 2016, 2023
     scale_Bio  = 1.0
     scale_to_installed_power_p = true
 
@@ -57,5 +63,5 @@ function make_parameter()
     storage_capacities, over_production, par
 end
 
-storage_capacities, over_production, par = make_parameter()
+storage_capacities, over_production, par = make_parameter(start_year = 2016, stop_year = 2024);
 compute_and_plot(storage_capacities, over_production, par);
