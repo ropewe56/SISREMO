@@ -80,7 +80,7 @@ function PowerData(data_dir, punit, start_year, end_year, scale_Bio=1.0)
     
     # energy charts data are in MW, MW_to_unit is conversion factor to eunit (MW, GW, TW)
 
-    MW_to_unit = uconversion_factor(u_MW, 1.0*punit)
+    MW_to_unit = uconversion_factor(punit, 1u_MW)
     Load    = average_to_hour(Load_4)     .* MW_to_unit
     Woff    = average_to_hour(Woff_4)     .* MW_to_unit
     Won     = average_to_hour(Won_4)      .* MW_to_unit

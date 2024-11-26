@@ -115,7 +115,7 @@ function plot_storage_fill_level(dates::Vector{DateTime}, L_de::Vector{Float64},
     end
     pl.xlabel("time")
     pl.ylabel(@sprintf("storage fill level [%sh]", punit))
-    pl.legend()
+    #pl.legend()
     pl.grid()
     pl.savefig(joinpath(fig_dir, pngpath))
 

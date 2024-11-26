@@ -22,13 +22,13 @@ mkpath(get_fig_dir())
 """
 function get_storage_capacities(punit, stc, over_production)
 
-    conversion_factor = uconversion_factor(u_TW, punit)
+    conversion_factor = uconversion_factor(punit, 1u_TW)
 
     storage_capacities = Vector{Vector{Float64}}(undef, 0)
     for sc in stc
         # stc1 < stc2
         stc1 = @. sc * 0.01
-        stc2 = @. sc - stc1
+        stc2 = @. sc
         stc1 = stc1 * conversion_factor
         stc2 = stc2 * conversion_factor
         #push!(storage_capacities, [stc1, stc2])
@@ -39,7 +39,7 @@ function get_storage_capacities(punit, stc, over_production)
 end
 
 function make_parameter(;start_year = 2016, stop_year = 2024)
-    punit = [1u_MW, 1u_GW, 1u_TW][2]
+    punit = u_GW # [1u_MW, 1u_GW, 1u_TW][3]
 
     scale_Bio  = 1.0
     scale_to_installed_power_p = true
@@ -65,3 +65,4 @@ end
 
 storage_capacities, over_production, par = make_parameter(start_year = 2016, stop_year = 2024);
 compute_and_plot(storage_capacities, over_production, par);
+compute_and_plot_averaged(storage_capacities, over_production, par);
