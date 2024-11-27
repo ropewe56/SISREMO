@@ -48,6 +48,7 @@ function make_parameter(;start_year = 2016, end_year = 2024)
     par.plot_p      = [false, true][2]
     par.plot_all_p  = [false, true][1]
     par.log_p       = [false, true][1]
+    par.scale_with_installed_power_p = true
 
     factor = uconversion_factor(par.punit, 1u_TW)
     storage_capacities = [x*factor for x in [14.0, 26.0, 35.0, 45.0, 55.0]]

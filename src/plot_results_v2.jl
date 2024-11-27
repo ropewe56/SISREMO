@@ -103,19 +103,24 @@ function plot_detrended(dates::Vector{DateTime}, WWSB::Vector{Float64}, WWSB_de:
     pl.grid()
     pl.title("WWSB power - Load")
     pl.savefig(joinpath(fig_dir, path2))
+end
 
-
+function plot_cumulative_power(dates, WWSB, Load, oprod, punit, fig_dir, fig)
     pl.figure(fig[1]); fig[1] += 1
-    cΔEL = cumsum(ΔEL)
-    pl.plot(dates, cΔEL, label = "cumsum(ΔEL)")
+    cΔEL = cumsum(WWSB .- Load)
+    @infoe 1, cΔEL[end]
+    pl.plot(dates, cΔEL, label = "o=1")
+    for op in oprod
+        cΔEL = cumsum(WWSB.*op .- Load)
+        pl.plot(dates, cΔEL, label = @sprintf("o=%f", op))
+        @infoe op, cΔEL[end]
+    end
     pl.xlabel("time")
     pl.ylabel(@sprintf("(WWSB - LOad) [%s]", punit))
     pl.legend()
     pl.grid()
     pl.title("cumsum(WWSB power - Load)")
     pl.savefig(joinpath(fig_dir, "cumsumWWSBLoad.png"))
-    @infoe "*****"
-
 end
 
 function plot_storage_fill_level(dates::Vector{DateTime}, Load_de::Vector{Float64}, WWWSB_de::Vector{Float64}, 
