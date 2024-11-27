@@ -14,7 +14,6 @@ include("storage/energy_data.jl")
 root = dirname(@__DIR__)
 get_data_dir()   = joinpath(root, "data")
 get_fig_dir()    = joinpath(root, "figures")
-mkpath(get_fig_dir())
 
 """
     dates
@@ -148,7 +147,7 @@ end
     storage_capacity : storage capacity
 """
 function compute_storage_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64},
-    stc1::Float64, stc2::Float64, oprod::Float64; do_log = false)
+    stc1::Float64, stc2::Float64, oprod::Float64; log_p = false)
 
     # renewable energy over production
     RP = RP .* oprod
@@ -156,7 +155,7 @@ function compute_storage_level(dates::Vector{DateTime}, Load::Vector{Float64}, R
     ΔP = (RP - Load)
 
     out1, out2, out3 = nothing, nothing, nothing
-    if do_log
+    if log_p
         out1 = open(@sprintf("log_%3.1f_1.log", oprod), "w")
         out2 = open(@sprintf("log_%3.1f_2.log", oprod), "w")
         out3 = open(@sprintf("log_%3.1f_3.log", oprod), "w")
@@ -195,13 +194,13 @@ end
 """
     compute storage fill level for different combinations of storage_capacity and over_production
 """
-function compute_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64}, punit::String, stc1, stc2, oprod; do_log = false)
+function compute_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64}, punit::String, stc1, stc2, oprod; log_p = false)
     @infoe @sprintf("==== compute_storage_fill_level ===================================================================")
 
     res1 = []
     res2 = []
     for (sc1, sc2, op) in zip(stc1, stc2, oprod)
-        stg1, stg2 = compute_storage_level(dates, Load, RP, sc1, sc2, op, do_log = do_log)
+        stg1, stg2 = compute_storage_level(dates, Load, RP, sc1, sc2, op, log_p = log_p)
         push!(res1, stg1)
         push!(res2, stg2)
     end
@@ -273,7 +272,7 @@ function plot_powers(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{
     end
 end
 
-function plot_detrended(dates::Vector{DateTime}, RP::Vector{Float64}, RP_de::Vector{Float64}, RP_trend::Vector{Float64}, ΔEL::Vector{Float64},
+function plot_detrended(dates::Vector{DateTime}, WWSB::Vector{Float64}, WWSB_de::Vector{Float64}, WWSB_trend::Vector{Float64}, ΔEL::Vector{Float64},
     Load::Vector{Float64}, Load_de::Vector{Float64}, Load_trend::Vector{Float64}, 
     punit ::String, fig_dir::String, fig::Vector{Int64}; data_are_averaged = false)
 
@@ -298,37 +297,37 @@ function plot_detrended(dates::Vector{DateTime}, RP::Vector{Float64}, RP_de::Vec
     pl.title("Load detrended")
     pl.savefig(joinpath(fig_dir, path1))
 
-    label1 = "RP"
-    label2 = "RP_de"
-    label3 = "RP_de - Load"
-    path1  = "RP_detrended.png"
-    path2  = "RP_diff_detrended.png"
+    label1 = "WWSB"
+    label2 = "WWSB_de"
+    label3 = "WWSB_de - Load"
+    path1  = "WWSB_detrended.png"
+    path2  = "WWSB_diff_detrended.png"
     if data_are_averaged
-        label1 = "RP_av"
-        label2 = "RP_av_de"
-        label3 = "RP_av_de - Load_av"
-        path1  = "RP_av_detrended.png"
-        path2  = "RP_av_diff_detrended.png"
+        label1 = "WWSB_av"
+        label2 = "WWSB_av_de"
+        label3 = "WWSB_av_de - Load_av"
+        path1  = "WWSB_av_detrended.png"
+        path2  = "WWSB_av_diff_detrended.png"
     end
 
     pl.figure(fig[1]); fig[1] += 1
-    pl.plot(dates, RP      , label = label1)
-    pl.plot(dates, RP_de   , label = label2)
-    pl.plot(dates, RP_trend,  "r", linewidth=3, label = "RP_trend")
+    pl.plot(dates, WWSB      , label = label1)
+    pl.plot(dates, WWSB_de   , label = label2)
+    pl.plot(dates, WWSB_trend,  "r", linewidth=3, label = "WWSB_trend")
     pl.xlabel("time")
     pl.ylabel(@sprintf("P [%s]", punit))
     pl.grid()
     pl.legend()
-    pl.title("Renewable detrended")
+    pl.title("WWSB power detrended")
     pl.savefig(joinpath(fig_dir, path1))
 
     pl.figure(fig[1]); fig[1] += 1
     pl.plot(dates, ΔEL, label = label3)
     pl.xlabel("time")
-    pl.ylabel(@sprintf("(P_E - P_L) [%s]", punit))
+    pl.ylabel(@sprintf("(WWSB - Load) [%s]", punit))
     pl.legend()
     pl.grid()
-    pl.title("Renewable power - Load")
+    pl.title("WWSB power - Load")
     pl.savefig(joinpath(fig_dir, path2))
 end
 
@@ -473,11 +472,11 @@ end
 """
     load data and compute and plot storage fille levels, original times (15 min)
 """
-function comp_and_plot(stc1, stc2, oprod, data_dir, fig_dir, punit, start_year, stop_year; plot_p = false, plot_all_p = false, do_log = false)
-    dates, Load, RP, RP_de, RP_trend, ΔEL, Load_de, Load_trend = load_data(data_dir, punit, start_year, stop_year)
+function comp_and_plot(stc1, stc2, oprod, data_dir, fig_dir, punit, start_year, end_year; plot_p = false, plot_all_p = false, log_p = false)
+    dates, Load, RP, RP_de, RP_trend, ΔEL, Load_de, Load_trend = load_data(data_dir, punit, start_year, end_year)
     return
 
-    (res1, res2, oprod) = compute_storage_fill_level(dates, Load_de, RP_de, punit, stc1, stc2, oprod, do_log = do_log)
+    (res1, res2, oprod) = compute_storage_fill_level(dates, Load_de, RP_de, punit, stc1, stc2, oprod, log_p = log_p)
     # Vector{(storage_fill, stg1, stg2, sc, op)}
 
     for (stg1, stg2, op) in zip(res1, res2, oprod)
@@ -528,7 +527,6 @@ function comp_and_plot_averaged(data_dir, fig_dir, punit; plot_p = false)
 
     if plot_p
         fig_dir = joinpath(fig_dir, "averaged")
-        mkpath(fig_dir)
         fig = [1]
         plot_powers(dates, Load_av, RP_av, averaging_hours, fig_dir, punit, fig)
         plot_detrended(dates, RP, RP_av_de, RP_av_trend, ΔEL_av, Load_av, Load_av_de, Load_av_trend, punit, fig_dir, fig, data_are_averaged = true)

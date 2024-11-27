@@ -15,21 +15,28 @@ include("plot_results_v2.jl")
 root = dirname(@__DIR__)
 get_data_dir()   = joinpath(root, "data")
 get_fig_dir()    = joinpath(root, "figures")
-mkpath(get_fig_dir())
 
-mutable struct Parameter
-    data_dir
-    fig_dir
-    punit
-    start_year
-    stop_year
-    scale_Bio
-    SF1_factor
-    scale_to_installed_power_p
-    plot_p
-    plot_all_p
-    do_log
+Base.@kwdef mutable struct StorageParameter
+    data_dir   = get_data_dir() 
+    fig_dir    = get_fig_dir() 
+    punit      = u_GW
+    start_year = 2016
+    end_year  = 2024
+    scale_Bio  = 1.0
+    SF1_factor = 1.0
+    scale_to_installed_power_p = true
+    second_storage_p = false
+    plot_p      = true
+    plot_all_p  = false
+    log_p       = false
+    Load_scale  = 1.0
+    Woff_scale  = 1.0
+    Won_scale   = 1.0
+    Solar_scale = 1.0
+    Bio_scale   = 1.0
+    averaging_hours = 24*7
 end
+
 
 """
     get the elapsed time of 1 step
@@ -77,44 +84,29 @@ function detrend_time_series(A)
     A_de, A_trend
 end
 
-function scale_power(L, Wf, Wn, So, B)
-    R  = Wf .+ Wn .+ So
+function scale_power(Load, Woff, Won, Solar, Bio)
+    WWS  = Woff .+ Won .+ Solar
 
-    mean_L = mean(L)
-    mean_B = mean(B)
-    mean_R = mean(R)
+    mean_L = mean(Load)
+    mean_B = mean(Bio)
+    mean_R = mean(WWS)
 
     # mean_L*op = mean_R * scale + mean_B
     scale = (mean_L - mean_B) / mean_R
 
-    Wf_sc = Wf .* scale
-    Wn_sc = Wn .* scale
-    So_sc = So .* scale
+    Wf_sc = Woff  .* scale
+    Wn_sc = Won   .* scale
+    So_sc = Solar .* scale
 
-    P_sc = R .* scale .+ B
+    WWSB_sc = Woff .+ Won .+ Solar .* scale .+ Bio
 
-    Wf_sc, Wn_sc, So_sc, P_sc
+    Wf_sc, Wn_sc, So_sc, WWSB_sc
 end
 
+function renewables_detrend_and_scale(power_data, par)
+    @infoe length(power_data.Woff)
 
-struct DetrendedPowers
-    Load        :: Vector{Float64}
-    Power       :: Vector{Float64}  # Power = (Woff+Won+Solar)*scale + Bio
-    Woff        :: Vector{Float64}
-    Won         :: Vector{Float64}
-    Solar       :: Vector{Float64}
-    Bio         :: Vector{Float64}
-    L_trend     :: Vector{Float64}
-    P_trend     :: Vector{Float64}
-    Woff_trend  :: Vector{Float64}
-    Won_trend   :: Vector{Float64}
-    Solar_trend :: Vector{Float64}
-    Bio_trend   :: Vector{Float64}
-end
-
-function renewables_scale_and_detrend(data_dir, data, punit, scale_Bio)
-
-    IP = InstalledPower(data, data_dir, punit, scale_Bio)
+    IP = InstalledPowerData(power_data, par)
 
     md_Woff  = 1.0 / mean(IP.Woff)
     md_Won   = 1.0 / mean(IP.Won)
@@ -126,42 +118,44 @@ function renewables_scale_and_detrend(data_dir, data, punit, scale_Bio)
     IP_Solar = @. IP.Solar * md_Solar
     IP_Bio   = @. IP.Bio   * md_Bio
 
-    Woff  = @. data.Woff  / IP_Woff
-    Won   = @. data.Won   / IP_Won
-    Solar = @. data.Solar / IP_Solar
-    Bio   = @. data.Bio   / IP_Bio
+    Woff  = @. power_data.Woff  / IP_Woff
+    Won   = @. power_data.Won   / IP_Won
+    Solar = @. power_data.Solar / IP_Solar
+    Bio   = @. power_data.Bio   / IP_Bio
 
-    s1 = mean(data.Woff) / mean(Woff)
-    s2 = mean(data.Won)  / mean(Won)
-    s3 = mean(data.Solar)/ mean(Solar)
-    s4 = mean(data.Bio)  / mean(Bio)
+    s1 = mean(power_data.Woff) / mean(Woff)
+    s2 = mean(power_data.Won)  / mean(Won)
+    s3 = mean(power_data.Solar)/ mean(Solar)
+    s4 = mean(power_data.Bio)  / mean(Bio)
 
     Woff , Woff_trend  = detrend_time_series(Woff  .* s1)
     Won  , Won_trend   = detrend_time_series(Won   .* s2)
     Solar, Solar_trend = detrend_time_series(Solar .* s3)
     Bio  , Bio_trend   = detrend_time_series(Bio   .* s4)
 
-    Wf_sc, Wn_sc, So_sc, P_sc = scale_power(data.Load, Woff, Won, Solar, Bio)
+    Woff_sc, Won_sc, Solar_sc, WWSB_sc = scale_power(power_data.Load, Woff, Won, Solar, Bio)
 
-    P_de, P_trend = detrend_time_series(Wf_sc .+ Wn_sc .+ So_sc .+ Bio)
-    L_de, L_trend = detrend_time_series(data.Load)
+    WWSB_de, WWSB_trend = detrend_time_series(Woff_sc .+ Won_sc .+ Solar_sc .+ Bio)
+    Load_de, Load_trend = detrend_time_series(power_data.Load)
 
-    sum_L = sum(L_de)
-    sum_P = sum(P_sc)
-    @infoe @sprintf("sum_L = %10.4e, sum_P = %10.4e, sum_L-sum_P = %10.4e", sum_L, sum_P, sum_L-sum_P)
+    Load_sum = sum(Load_de)
+    WWSB_sum = sum(WWSB_sc)
+    @infoe @sprintf("Load_sum = %10.4e, WWSB_sum = %10.4e, sum_L-sum_P = %10.4e", Load_sum, WWSB_sum, Load_sum-WWSB_sum)
 
-    powers = DetrendedPowers(L_de, P_sc, Wf_sc, Wn_sc, So_sc, Bio, L_trend, P_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend)
-    powers
+    powers_de = DetrendedPowerData(power_data.dates, power_data.uts, 
+                    Load_de, Woff_sc, Won_sc, Solar_sc, Bio, WWSB_de, 
+                    Load_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend, WWSB_trend)
+    powers_de
 end
 
-function detrend_renewables(data)
-    Woff , Woff_trend  = detrend_time_series(data.Woff )
-    Won  , Won_trend   = detrend_time_series(data.Won  )
-    Solar, Solar_trend = detrend_time_series(data.Solar)
-    Bio  , Bio_trend   = detrend_time_series(data.Bio  )
+function detrend_renewables(power_data)
+    Woff , Woff_trend  = detrend_time_series(power_data.Woff )
+    Won  , Won_trend   = detrend_time_series(power_data.Won  )
+    Solar, Solar_trend = detrend_time_series(power_data.Solar)
+    Bio  , Bio_trend   = detrend_time_series(power_data.Bio  )
 
     P_de, P_trend = detrend_time_series(Woff .+ Won .+ Solar .+ Bio)
-    L_de, L_trend = detrend_time_series(data.Load)
+    L_de, L_trend = detrend_time_series(power_data.Load)
 
     powers = DetrendedPowers(L_de, P_de, Woff, Won, Solar, Bio, L_trend, P_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend)
     powers
@@ -311,7 +305,7 @@ function compute_storage_level(load, scaled_renewables, st_capacities, op::Float
             k1 = power_step(storages[1], load[istep], scaled_renewables[istep], istep)
             nb_strgs = length(storages)
             for j in 2:nb_strgs
-                k2 = power_step(storages[j], storages[j-1].I7[istep], storages[j-1].I5[iistep], iistep)
+                k2 = power_step(storages[j], storages[j-1].I7[istep], storages[j-1].I5[istep], istep)
             end
         end
     end
@@ -350,7 +344,7 @@ function compute_storage_fill_level(powers, st_capacities::Vector{Vector{Float64
         @infoe @sprintf("==== %d", i)
         @infoe @sprintf("storage_capacities = %s, over_production = %f", st_capacities[i], op)
         scaled_renewables = get_scaled_renewables(powers, op)
-        storages, scaled_renewables = compute_storage_level(powers.load, scaled_renewables, st_capacities[i], op, SF1_factor)
+        storages, scaled_renewables = compute_storage_level(powers.Load, scaled_renewables, st_capacities[i], op, SF1_factor)
         push!(storages_v, storages)
         push!(scaled_renewables_v, scaled_renewables)
     end
@@ -396,8 +390,8 @@ end
 """
 function compute_and_plot(st_capacities, oprod, par)
 
-    data_ec = PowerData(par.data_dir, par.punit, par.start_year, par.stop_year, par.scale_Bio);
-    dates = data_ec.dates
+    power_data = PowerData(par);
+    dates = power_data.dates
     #Load    = extrema(data_ec.Load   ) GW
     #Woff    = extrema(data_ec.Woff   ) GW
     #Won     = extrema(data_ec.Won    ) GW
@@ -405,17 +399,15 @@ function compute_and_plot(st_capacities, oprod, par)
     #Bio     = extrema(data_ec.Bio    ) GW
     #Nuclear = extrema(data_ec.Nuclear) GW
 
-
-    powers = if par.scale_to_installed_power_p
-        renewables_scale_and_detrend(par.data_dir, data_ec, par.punit, par.scale_Bio);
+    power_data_de = if par.scale_to_installed_power_p
+        renewables_detrend_and_scale(power_data, par);
     else
         detrend_renewables(data_ec);
     end
     # powers = Load, Power, Woff, Won, Solar, Bio, L_trend, P_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend   
     #                Power = (Woff+Won+Solar)*scale + Bio
 
-    
-    storages_v, scaled_renewables_v = compute_storage_fill_level(powers, st_capacities, oprod, par.SF1_factor)
+    storages_v, WWSB_scaled = compute_storage_fill_level(power_data_de, st_capacities, oprod, par.SF1_factor)
     
     nb_stg = length(storages_v[1])
     @infoe "nb_stg =", nb_stg
@@ -430,19 +422,22 @@ function compute_and_plot(st_capacities, oprod, par)
     end
 
     if par.plot_p
-        fig = [1]
-        L_ec = data_ec.Load
-        P_ec = @. data_ec.Woff + data_ec.Won + data_ec.Solar + data_ec.Bio
-        L_de = powers.Load
-        P_de = @. powers.Woff + powers.Won + powers.Solar + powers.Bio
+        @infoe @sprintf("fig_dir = %s", par.fig_dir)
 
-        ΔEL = (P_de - L_de)
-        plot_powers(dates, L_ec, L_de, P_ec, P_de, 0, par.fig_dir, par.punit, fig)
-        plot_detrended(dates, P_ec, P_de, powers.P_trend, ΔEL, L_ec, L_de, powers.L_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
+        fig      = [1]
+        Load     = power_data.Load
+        Load_de  = power_data_de.Load
+        WWWSB_de = power_data_de.WWSBPower
+
+        ΔEL = (WWWSB_de - Load_de)
+        plot_powers(dates, Load, Load_de, power_data.WWSBPower, WWWSB_de, 0, par.fig_dir, par.punit, fig)
+        plot_detrended(dates, power_data.WWSBPower, WWWSB_de, power_data_de.WWSB_trend, ΔEL, 
+            Load, Load_de, power_data_de.Load_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
         
         for j in 1:nb_stg
             @infoe j, fig
-            plot_storage_fill_level(dates, L_de, P_de, scaled_renewables_v, stores[j], oprod, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
+            plot_storage_fill_level(dates, Load_de, WWWSB_de, WWSB_scaled, stores[j], 
+                oprod, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
         end
     end
 end
@@ -452,56 +447,52 @@ end
 """
 function compute_and_plot_averaged(st_capacities::Vector{Vector{Float64}}, oprod::Vector{Float64}, par)
 
-    data_ec = PowerData(par.data_dir, par.punit, par.start_year, par.stop_year, par.scale_Bio);
-    dates = data_ec.dates
-    Load    = data_ec.Load   
-    Woff    = data_ec.Woff   
-    Won     = data_ec.Won    
-    Solar   = data_ec.Solar  
-    Bio     = data_ec.Bio    
-    Nuclear = data_ec.Nuclear
+    power_data = PowerData(par);
+    power_data_av = get_averaged_power_data(power_data, par.averaging_hours)
 
-    powers = if par.scale_to_installed_power_p
-        renewables_scale_and_detrend(par.data_dir, data_ec, par.punit, par.scale_Bio);
+    power_data_avde = if par.scale_to_installed_power_p
+        renewables_detrend_and_scale(power_data_av, par);
     else
-        detrend_renewables(data_ec);
+        detrend_renewables(power_data_av);
     end
-    # powers = Load, Power, Woff, Won, Solar, Bio, L_trend, P_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend   
-    #                Power = (Woff+Won+Solar)*scale + Bio
 
-    averaging_hours = 24*7;    
-    powers_av = []
-    local dates_av
-    for p in [Load, Woff, Won, Solar, Bio, Nuclear]
-        p_av, dates_av = averaging(p, dates, averaging_hours, method = "moving_average")
-        push!(powers_av, p_av)
+    storages_v, WWSB_scaled = compute_storage_fill_level(power_data_avde, st_capacities, oprod, par.SF1_factor)
+    nb_stg = length(storages_v[1])
+
+    nb_stg = length(storages_v[1])
+    @infoe @sprintf("nb_storages = %s", nb_stg)
+    stores = []
+    for j in 1:nb_stg
+        push!(stores, [])
     end
-    data_ec.dates = dates_av
-    data_ec.Load     = powers_av[1]
-    data_ec.Woff     = powers_av[2]
-    data_ec.Won      = powers_av[3]
-    data_ec.Solar    = powers_av[4]
-    data_ec.Bio      = powers_av[5]
-    data_ec.Nuclear  = powers_av[6]
+    for j in 1:nb_stg
+        for storages in storages_v
+            push!(stores[j], storages[j])
+        end
+    end
 
-    storages_v, scaled_renewables_v = compute_storage_fill_level(powers_av, st_capacities, oprod, par.SF1_factor)
-                                                     
     if par.plot_p
-        fig = [1]
-        L_ec = data_ec.Load
-        P_ec = @. data_ec.Woff + data_ec.Won + data_ec.Solar + data_ec.Bio
-        L_de = powers.Load
-        P_de = @. powers.Woff + powers.Won + powers.Solar + powers.Bio
+        @infoe @sprintf("fig_dir = %s", par.fig_dir)
 
-        ΔEL = (P_de - L_de)
-        plot_powers(dates, L_ec, L_de, P_ec, P_de, 0, par.fig_dir, par.punit, fig)
-        plot_detrended(dates, P_ec, P_de, powers.P_trend, ΔEL, L_ec, L_de, powers.L_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
+        fig = [1]
+        Load    = power_data_av.Load
+        WWSB    = power_data_av.WWSBPower
+        Load_de = power_data_avde.Load
+        WWSB_de = power_data_avde.WWSBPower
+
+        ΔEL = (WWSB_de - Load_de)
+        dates = power_data_av.dates
+
+        plot_powers(dates, Load, Load_de, WWSB, WWSB_de, 0, par.fig_dir, par.punit, fig)
+        plot_detrended(dates, WWSB, WWSB_de, power_data_avde.WWSB_trend, ΔEL, Load, Load_de, 
+                        power_data_avde.Load_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
         
         for j in 1:nb_stg
             @infoe j, fig
-            plot_storage_fill_level(dates, L_de, P_de, scaled_renewables_v, stores[j], oprod, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
+            plot_storage_fill_level(dates, Load_de, WWSB_de, WWSB_scaled, stores[j], oprod, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
         end
     end
+end
 
 #    for (stg1, stg2, op) in zip(res1, res2, oprod)
 #        Load_per_year = powers_to_energy_per_year(dates, Load)
@@ -531,4 +522,4 @@ function compute_and_plot_averaged(st_capacities::Vector{Vector{Float64}}, oprod
 #        plot_storage_fill_level(dates, Load_av_de, RP_av_de, res1, oprod, "S1", fig_dir, fig, "storage_fill1", punit, plot_all_p = plot_all_p)
 #        plot_storage_fill_level(dates, Load_av_de, RP_av_de, res2, oprod, "S2", fig_dir, fig, "storage_fill2", punit, plot_all_p = plot_all_p)
 #    end
-end
+#end

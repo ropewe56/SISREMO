@@ -9,7 +9,6 @@ include("storage_requirements_functions.jl")
 root = dirname(@__DIR__)
 get_data_dir()   = joinpath(root, "data")
 get_fig_dir()    = joinpath(root, "figures")
-mkpath(get_fig_dir())
 
 #"python.terminal.activateEnvironment": false
 
@@ -35,10 +34,10 @@ end
 punit = ["MW", "GW", "TW"][2]
 stc1, stc2, oprod = get_storage_capacities(punit)
 
-start_year, stop_year = 2016, 2023
+start_year, end_year = 2016, 2023
 
 plot_p     = [false, true][2]
 plot_all_p = [false, true][2]
-do_log     = [false, true][1]
+log_p     = [false, true][1]
 
-comp_and_plot(stc1, stc2, oprod, get_data_dir(), get_fig_dir(), punit, start_year, stop_year, plot_p=plot_p, plot_all_p=plot_all_p, do_log=do_log);
+comp_and_plot(stc1, stc2, oprod, get_data_dir(), get_fig_dir(), punit, start_year, end_year, plot_p=plot_p, plot_all_p=plot_all_p, log_p=log_p);

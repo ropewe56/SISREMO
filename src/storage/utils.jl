@@ -50,6 +50,7 @@ function mean_averaging(data, dates, averaging_hours)
         push!(avdates, dates[lio + Nh])
         lio = lio + averaging_steps
     end
+
     avdata, avdates
 end
 
@@ -108,13 +109,21 @@ function moving_average(data, dates, averaging_hours)
 end
 
 function averaging(data, dates, averaging_hours; method = "moving_average")
-    if method == "moving_average"
+    avdata, avdates = if method == "moving_average"
         moving_average(data, dates, averaging_hours)
     elseif method == "mean"
         mean_averaging(data, dates, averaging_hours)
     else
         @infoe @sprintf("method %s not vaialable", method)
     end
+
+    if length(avdata) == length(avdates)
+        return avdata, avdates
+    elseif length(avdata) == length(dates)
+        return avdata, dates
+    end
+    @warn @sprintf("length of data and dates don't fit.")
+    return avdata, avdates
 end
 
 function simple_damping(y, α)

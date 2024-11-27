@@ -17,9 +17,9 @@ function scale_detrend_print_info(data_ec, data)
 
     dates, L_ec, L, P_ec, P, P_de, P_trend, ΔEL, L_de, L_trend
 end
-function load_data(data_dir, punit, start_year, stop_year; scale_to_installed_power = true, plot_p=false)
+function load_data(data_dir, punit, start_year, end_year; scale_to_installed_power = true, plot_p=false)
 
-    data = PowerData(data_dir, punit, start_year, stop_year);
+    data = PowerData(data_dir, punit, start_year, end_year);
     L_ec = data.Load
     dates = data.dates
 
