@@ -50,6 +50,7 @@ function make_parameter(;start_year = 2016, end_year = 2024)
     par.log_p       = [false, true][1]
     par.scale_with_installed_power_p = true
     par.averaging_hours = 24*7*4
+    par.averaging_method = [:moving_average, :mean][1]
 
     factor = uconversion_factor(par.punit, 1u_TW)
     storage_capacities = [x*factor for x in [14.0, 26.0, 35.0, 45.0, 55.0]]
@@ -65,5 +66,5 @@ end
 
 storage_capacities, over_production, par = make_parameter(start_year = 2016, end_year = 2024);
 compute_and_plot(storage_capacities, over_production, par);
-par.fig_dir = par.fig_dir*"_av"
+par.fig_dir = par.fig_dir*"_av4"
 compute_and_plot_averaged(storage_capacities, over_production, par);

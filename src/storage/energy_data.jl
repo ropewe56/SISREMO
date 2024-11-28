@@ -221,14 +221,14 @@ struct AveragedPowerData
     WWSBPower:: Vector{Float64}  # 9
 end
 
-function get_averaged_power_data(power_data, averaging_hours)
-    Load     , dates_av = averaging(power_data.Load     , power_data.dates, averaging_hours, method = "moving_average")
-    Woff     , dates_av = averaging(power_data.Woff     , power_data.dates, averaging_hours, method = "moving_average")
-    Won      , dates_av = averaging(power_data.Won      , power_data.dates, averaging_hours, method = "moving_average")
-    Solar    , dates_av = averaging(power_data.Solar    , power_data.dates, averaging_hours, method = "moving_average")
-    Bio      , dates_av = averaging(power_data.Bio      , power_data.dates, averaging_hours, method = "moving_average")
-    Nuclear  , dates_av = averaging(power_data.Nuclear  , power_data.dates, averaging_hours, method = "moving_average")
-    WWSBPower, dates_av = averaging(power_data.WWSBPower, power_data.dates, averaging_hours, method = "moving_average")
+function get_averaged_power_data(power_data, averaging_hours, averaging_method)
+    Load     , dates_av = averaging(power_data.Load     , power_data.dates, averaging_hours, method = averaging_method)
+    Woff     , dates_av = averaging(power_data.Woff     , power_data.dates, averaging_hours, method = averaging_method)
+    Won      , dates_av = averaging(power_data.Won      , power_data.dates, averaging_hours, method = averaging_method)
+    Solar    , dates_av = averaging(power_data.Solar    , power_data.dates, averaging_hours, method = averaging_method)
+    Bio      , dates_av = averaging(power_data.Bio      , power_data.dates, averaging_hours, method = averaging_method)
+    Nuclear  , dates_av = averaging(power_data.Nuclear  , power_data.dates, averaging_hours, method = averaging_method)
+    WWSBPower, dates_av = averaging(power_data.WWSBPower, power_data.dates, averaging_hours, method = averaging_method)
 
     uts_av = [Dates.datetime2unix(x) for x in dates_av]
     @infoe length(Load)

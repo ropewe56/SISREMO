@@ -35,6 +35,7 @@ Base.@kwdef mutable struct StorageParameter
     Solar_scale = 1.0
     Bio_scale   = 1.0
     averaging_hours = 24*7
+    averaging_method = [:moving_average, :mean][1]
     scale_with_installed_power_p = false
 end
 
@@ -374,7 +375,7 @@ end
     RP : detrended and scaled renewable power
     punit : unit of Load and RP (MW. GW, TW)
 """
-function determine_overproduction(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64}, punit::String)
+function determine_overproduction(dates::Vector{DateTime}, Load::Vector{Float64}, WWSB_sc::Vector{Float64}, punit::String)
     overproduction = collect(LinRange(1.05, 1.5, 20))
     storage_capacities = []
     for op in overproduction
@@ -384,10 +385,10 @@ function determine_overproduction(dates::Vector{DateTime}, Load::Vector{Float64}
         it = 0
         while minS < 0.0 && it < 50
 
-            stg1, stg2 = compute_storage_level(powers, st_capacities, op, SF1_factor)
+            storages, WWSB_sc = compute_storage_level(Load, WWSB_sc, st_capacities, op::Float64, SF1_factor; log_p=false)
 
-            min_storage_level1 = minimum(stg1.SF)
-            min_storage_level2 = minimum(stg2.SF)
+            min_storage_level1 = minimum(storages[1].SF)
+            min_storage_level2 = minimum(storages[2].SF)
 
             stc1 = stc1 - min_storage_level1
             stc2 = stc2 - min_storage_level2
@@ -397,7 +398,6 @@ function determine_overproduction(dates::Vector{DateTime}, Load::Vector{Float64}
     end
     pl.plot(overproduction, storage_capacities, "r.")
 end
-
 
 """
     load data and compute and plot storage fille levels, original times (15 min)
@@ -466,7 +466,7 @@ end
 function compute_and_plot_averaged(st_capacities::Vector{Vector{Float64}}, oprod::Vector{Float64}, par)
 
     power_data = PowerData(par);
-    power_data_av = get_averaged_power_data(power_data, par.averaging_hours)
+    power_data_av = get_averaged_power_data(power_data, par.averaging_hours, par.averaging_method)
 
     power_data_avde = if par.scale_to_installed_power_p
         renewables_detrend_and_scale(power_data_av, par);
@@ -507,7 +507,7 @@ function compute_and_plot_averaged(st_capacities::Vector{Vector{Float64}}, oprod
                         power_data_avde.Load_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
                 
         plot_cumulative_power(dates, WWSB_de, Load_de, oprod, par.punit, par.fig_dir, fig)
-        
+    
         for j in 1:nb_stg
             @infoe j, fig
             plot_storage_fill_level(dates, Load_de, WWSB_de, WWSB_scaled, stores[j], oprod, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)

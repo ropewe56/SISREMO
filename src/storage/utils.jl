@@ -108,10 +108,10 @@ function moving_average(data, dates, averaging_hours)
     avdata, avdates
 end
 
-function averaging(data, dates, averaging_hours; method = "moving_average")
-    avdata, avdates = if method == "moving_average"
+function averaging(data, dates, averaging_hours; method = :moving_average)
+    avdata, avdates = if method == :moving_average
         moving_average(data, dates, averaging_hours)
-    elseif method == "mean"
+    elseif method == :mean
         mean_averaging(data, dates, averaging_hours)
     else
         @infoe @sprintf("method %s not vaialable", method)
