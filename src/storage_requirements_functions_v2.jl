@@ -12,34 +12,6 @@ include("storage/energy_data.jl")
 
 include("plot_results_v2.jl")
 
-root = dirname(@__DIR__)
-get_data_dir()   = joinpath(root, "data")
-get_fig_dir()    = joinpath(root, "figures")
-
-Base.@kwdef mutable struct StorageParameter
-    data_dir   = get_data_dir() 
-    fig_dir    = get_fig_dir() 
-    punit      = u_GW
-    start_year = 2016
-    end_year  = 2024
-    scale_Bio  = 1.0
-    SF1_factor = 1.0
-    scale_to_installed_power_p = true
-    second_storage_p = false
-    plot_p      = true
-    plot_all_p  = false
-    log_p       = false
-    Load_scale  = 1.0
-    Woff_scale  = 1.0
-    Won_scale   = 1.0
-    Solar_scale = 1.0
-    Bio_scale   = 1.0
-    averaging_hours = 24*7
-    averaging_method = [:moving_average, :mean][1]
-    scale_with_installed_power_p = false
-end
-
-
 """
     get the elapsed time of 1 step
     Dates.value(DateTime) => ms since 1 AD
@@ -106,7 +78,7 @@ function scale_power(Load, Woff, Won, Solar, Bio)
     Woff_sc, Won_sc, Solar_sc, WWSB_sc, scale
 end
 
-function renewables_detrend_and_scale(power_data, par)
+function renewables_detrend_and_scale(hdf5_dir, power_data, par)
     local Woff_de 
     local Won_de  
     local Solar_de
@@ -119,7 +91,8 @@ function renewables_detrend_and_scale(power_data, par)
     local Load_trend 
     
     if par.scale_with_installed_power_p
-        IP = InstalledPowerData(power_data, par)
+        IP = InstalledPowerData(hdf5_dir, power_data, par)
+
         IP_Woff  = @. IP.Woff  / mean(IP.Woff)
         IP_Won   = @. IP.Won   / mean(IP.Won)
         IP_Solar = @. IP.Solar / mean(IP.Solar)
@@ -171,9 +144,11 @@ function detrend_renewables(power_data)
 
     P_de, P_trend = detrend_time_series(Woff .+ Won .+ Solar .+ Bio)
     L_de, L_trend = detrend_time_series(power_data.Load)
-
-    powers = DetrendedPowers(L_de, P_de, Woff, Won, Solar, Bio, L_trend, P_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend)
-    powers
+    
+    detrended_powers = DetrendedPowerData(power_data.dates, power_data.uts,
+        L_de, P_de, Woff, Won, Solar, Bio, L_trend, P_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend)
+    
+    detrended_powers
 end
 
 mutable struct Storage
@@ -402,24 +377,7 @@ end
 """
     load data and compute and plot storage fille levels, original times (15 min)
 """
-function compute_and_plot(st_capacities, oprod, par)
-
-    power_data = PowerData(par);
-    dates = power_data.dates
-    #Load    = extrema(data_ec.Load   ) GW
-    #Woff    = extrema(data_ec.Woff   ) GW
-    #Won     = extrema(data_ec.Won    ) GW
-    #Solar   = extrema(data_ec.Solar  ) GW
-    #Bio     = extrema(data_ec.Bio    ) GW
-    #Nuclear = extrema(data_ec.Nuclear) GW
-
-    power_data_de = if par.scale_to_installed_power_p
-        renewables_detrend_and_scale(power_data, par);
-    else
-        detrend_renewables(data_ec);
-    end
-    # powers = Load, Power, Woff, Won, Solar, Bio, L_trend, P_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend   
-    #                Power = (Woff+Won+Solar)*scale + Bio
+function compute_and_plot(power_data, power_data_de, st_capacities, oprod, par)
 
     storages_v, WWSB_scaled = compute_storage_fill_level(power_data_de, st_capacities, oprod, par.SF1_factor)
     

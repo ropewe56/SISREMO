@@ -1,7 +1,7 @@
 using Pkg
 
-Pkg.develop(url="/home/wester/Projects/Julia/Packages/BaseUtils")
-Pkg.develop(url="/home/wester/Projects/Julia/Packages/PhysConst")
+Pkg.develop(url="/home/wester/Projects/Julia/Packages/BaseUtils.jl")
+Pkg.develop(url="/home/wester/Projects/Julia/Packages/PhysConst.jl")
 
 Pkg.add("CSV")
 Pkg.add("CurveFit")
@@ -16,11 +16,14 @@ Pkg.add("JSON3")
 Pkg.add("NLopt")
 Pkg.add("OrderedCollections")
 Pkg.add("Printf")
+Pkg.add("PyPlot")
 Pkg.add("Statistics")
+
+
+################################################
 
 Pkg.rm("BaseUtils")
 Pkg.rm("PhysConst")
-
 Pkg.rm("CSV")
 Pkg.rm("CurveFit")
 Pkg.rm("DataFrames")
@@ -34,4 +37,5 @@ Pkg.rm("JSON3")
 Pkg.rm("NLopt")
 Pkg.rm("OrderedCollections")
 Pkg.rm("Printf")
+Pkg.rm("PyPlot")
 Pkg.rm("Statistics")

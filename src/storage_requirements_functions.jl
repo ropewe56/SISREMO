@@ -395,7 +395,7 @@ end
 
 function load_data(data_dir, punit, start_year, end_year; scale_to_installed_power = true)
     scale_Bio = 1.0
-    data = PowerData(data_dir, punit, start_year, end_year, scale_Bio);
+    data = PowerData(punit, start_year, end_year, scale_Bio);
     Load = data.Load
 
     if scale_to_installed_power

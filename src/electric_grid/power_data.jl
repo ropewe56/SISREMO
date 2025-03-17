@@ -4,8 +4,8 @@ import PyPlot as pl
 pl.pygui(true)
 pl.pygui(:qt5)
 
-include("power_parameter.jl")
-include("storage_requirements_functions_v2.jl")
+include("../power_parameter.jl")
+include("../storage_requirements_functions_v2.jl")
 
 #"python.terminal.activateEnvironment": false
 
@@ -45,8 +45,8 @@ function make_parameter()
     par
 end
 
-function storage_and_overproduction(par)
-    factor = uconversion_factor(par.punit, 1u_TW)
+function storage_and_overproduction(punit)
+    factor = uconversion_factor(punit, 1u_TW)
     storage_capacities = [x*factor for x in [14.0, 26.0, 35.0, 45.0, 55.0]]
     over_production = [1.5, 1.2, 1.15, 1.1, 1.05]
     storage_capacities, over_production
@@ -54,7 +54,7 @@ end
 
 function get_paths()
     # project root directory
-    sisremo_dir = dirname(@__DIR__)
+    sisremo_dir = dirname(dirname(@__DIR__))
     hdf5_dir = joinpath(sisremo_dir, "data")
     json_dir = joinpath(hdf5_dir, "json_downloads")
 
@@ -62,24 +62,43 @@ function get_paths()
     mkpath(json_dir)
     json_dir, hdf5_dir
 end
-json_dir, hdf5_dir = get_paths()
-start_year = 2016
-end_year = 2025
-par = make_parameter()
 
-storage_capacities, over_production = storage_and_overproduction(par)
+function get_power_data()
+    json_dir, hdf5_dir = get_paths()
+    start_year = 2016
+    end_year = 2025
+    par = make_parameter()
 
-power_data = PowerData(hdf5_dir, start_year, end_year, par);
-detrended_and_scaled_data = renewables_detrend_and_scale(hdf5_dir, power_data, par);
+    storage_capacities, over_production = storage_and_overproduction(par.punit)
 
-power_data_de = if par.scale_to_installed_power_p
-    renewables_detrend_and_scale(hdf5_dir, power_data, par);
-else
-    detrend_renewables(power_data);
+    power_data = PowerData(hdf5_dir, start_year, end_year, par);
+    detrended_and_scaled_data = renewables_detrend_and_scale(hdf5_dir, power_data, par);
+
+    power_data_de = if par.scale_to_installed_power_p
+        renewables_detrend_and_scale(hdf5_dir, power_data, par);
+    else
+        detrend_renewables(power_data);
+    end
+
+    #dates       :: Vector{DateTime} # 1
+    #uts         :: Vector{Int64}    # 2
+    #Load        :: Vector{Float64}  # 3
+    #Woff        :: Vector{Float64}  # 4
+    #Won         :: Vector{Float64}  # 5 
+    #Solar       :: Vector{Float64}  # 6 
+    #Bio         :: Vector{Float64}  # 7 
+    #WWSBPower   :: Vector{Float64}  # 8 
+    #Load_trend  :: Vector{Float64}  # 9
+    #Woff_trend  :: Vector{Float64}  # 10 
+    #Won_trend   :: Vector{Float64}  # 11 
+    #Solar_trend :: Vector{Float64}  # 12 
+    #Bio_trend   :: Vector{Float64}  # 13 
+    #WWSB_trend  :: Vector{Float64}  # 14 
+
+    power_data_de.WWSBPower
+    power_data_de.dates
+
+    power_data_de.uts[2] - power_data_de.uts[1]
+
+    power_data_de, par
 end
-
-
-compute_and_plot(hdf5_dir, storage_capacities, over_production, par);
-
-par.fig_dir = par.fig_dir*"_av4"
-compute_and_plot_averaged(storage_capacities, over_production, par);
