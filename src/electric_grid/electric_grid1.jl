@@ -267,7 +267,7 @@ f(x) = compute(x, par)[1]
 initial_x = [ 150.0, 2.0e4, 1.1]
 lower     = [   0.0,   0.0, 1.0]
 upper     = [1000.0, 5.0e4, 1.5]
-sol = optimize(f, lower, upper, initial_x, NelderMead())#IPNewton())
+sol = optimize(f, lower, upper, initial_x, Fminbox(NelderMead()))#, iterations = 200) #IPNewton())
 
 x = Optim.minimizer(sol)
 
