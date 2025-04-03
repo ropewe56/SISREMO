@@ -31,7 +31,7 @@ mutable struct Production{T}
     price_of_MWh :: T
 end
 
-function Production(Et::Vector{T}, op::T, price_of_MWh::T=100.0) where T
+function Production(Et::Vector{T}, op::T, price_of_MWh::T) where T
     Production(copy(Et) .* op, zeros(T,length(Et)), price_of_MWh)
 end
 
@@ -39,7 +39,7 @@ function energy_cost(prod::Production{T}, E::T) where T
     prod.price_of_MWh*1.0e3 * E
 end
 
-function request_energy(prod::Production{T}, E, it, Δt) where T
+function request_energy(prod::Production{T}, E::T, it::Int64, Δt::T) where T
     if prod.Et[it] >= E
         prod.ΔE[it] = E
     else
@@ -68,7 +68,7 @@ mutable struct Import{T}
     price_of_MWh :: T
 end
 
-function Import(n, price_of_MWh = 100.0)
+function Import(n, price_of_MWh)
     T = typeof(price_of_MWh)
     Import(zeros(T, n), zeros(T, n), price_of_MWh)
 end
@@ -77,7 +77,7 @@ function energy_cost(imp::Import{T}, E::T) where T
     imp.price_of_MWh*1.0e3 * E
 end
 
-function request_energy(imp::Import{T}, E, it, Δt) where T
+function request_energy(imp::Import{T}, E::T, it, Δt::T) where T
     imp.ΔE[it] = E
     E
 end
@@ -95,8 +95,7 @@ mutable struct Export{T}
     price_of_MWh :: T
 end
 
-function Export(n, price_of_MWh=100.0)
-    T = typeof(price_of_MWh)
+function Export(n, price_of_MWh::T) where T
     Export(zeros(T, n), zeros(T, n), price_of_MWh)
 end
 
@@ -104,7 +103,7 @@ function energy_cost(ex::Export{T}, E::T) where T
     ex.price_of_MWh*1.0e3 * E
 end
 
-function energy_to_sink(expp::Export{T}, e, it) where T
+function energy_to_sink(expp::Export{T}, e::T, it) where T
     expp.ΔE[it] = e
 end
 
@@ -128,7 +127,7 @@ mutable struct Battery{T} <: AbstractStorage{T}
     price_of_MWh :: T 
 end
 
-function Battery(n::Int64, CAP::T, inP::T, outP::T, ηin::T, ηout::T, price_of_MWh::T = T(100.0); E0::T = zero(T)) where T
+function make_battery(n::Int64, CAP, inP, outP, ηin, ηout, price_of_MWh, E0::T) where T
     E = zeros(T, n)
     E[1] = E0
     Battery(CAP, E, zeros(T,n), inP, outP, ηin, ηout, price_of_MWh)
@@ -149,7 +148,7 @@ mutable struct Hydrogen{T} <: AbstractStorage{T}
     price_of_MWh :: T
 end
 
-function Hydrogen(n::Int64, CAP::T, inP::T, outP::T, ηin::T, ηout::T, price_of_MWh::T=200.0; E0 = zero(T)) where T
+function make_hydrogen(n::Int64, CAP::T, inP::T, outP::T, ηin::T, ηout::T, price_of_MWh::T, E0::T) where T
     E = zeros(T, n)
     E[1] = E0
     Hydrogen(CAP, E, zeros(T,n), inP, outP, ηin, ηout, price_of_MWh)
@@ -159,7 +158,7 @@ function energy_cost(h2::Hydrogen{T}, E::T) where T
     h2.price_of_MWh*1.0e3 * E
 end
 
-function request_energy(st::AbstractStorage{T}, E, it, Δt) where T
+function request_energy(st::AbstractStorage{T}, E::T, it, Δt::T) where T
     function maxenergy_return(e)
         if E/st.ηout <= st.outP*Δt
             st.ΔE[it] = E/st.ηout
@@ -168,7 +167,7 @@ function request_energy(st::AbstractStorage{T}, E, it, Δt) where T
         end
     end
 
-    if st.E[it] - E >= 0.0
+    if st.E[it] - E >= zero(T)
         maxenergy_return(E)
     else
         maxenergy_return(st.E[it])
@@ -184,7 +183,7 @@ function substract_energy(st::AbstractStorage{T}, it) where T
     st.E[it] -= st.ΔE[it]
 end
 
-function energy_to_sink(st::AbstractStorage{T}, E, it) where T
+function energy_to_sink(st::AbstractStorage{T}, E::T, it) where T
     ΔEmax = st.CAP - st.E[it]
     if ΔEmax > E
         st.ΔE[it] = E
@@ -200,7 +199,7 @@ end
 """
     Consumption
 """
-function consumption(load::Consumption{T}, sources, it, Δt, io) where T
+function consumption(load::Consumption{T}, sources, it, Δt::T) where T
     Load0 = load.Et[it]
     Load = 0.0
     # sources = (prod, bat, H2, impp)
@@ -222,7 +221,7 @@ function consumption(load::Consumption{T}, sources, it, Δt, io) where T
     end
 end
 
-function production(prod::Production{T}, sinks, it, Δt) where T
+function production(prod::Production{T}, sinks, it, Δt::T) where T
     E_remaining = get_energy(prod, it)
 
     for sink in sinks
@@ -231,7 +230,7 @@ function production(prod::Production{T}, sinks, it, Δt) where T
         substract_from_remaining_energy(prod, it, Emax)
         E_remaining = get_energy(prod, it)
 
-        if E_remaining <= 0.0
+        if E_remaining <= zero(T)
             break
         end
     end
@@ -242,10 +241,8 @@ function production(prod::Production{T}, sinks, it, Δt) where T
 end
 
 function run_system(load::Consumption{}, prod::Production{T}, bat::Battery{T}, H2::Hydrogen{T}, 
-                    impp::Import{T}, expp::Export{T}; Δt=one(T)) where T
+                    impp::Import{T}, expp::Export{T}, Δt::T) where T
     
-    io = open(joinpath(@__DIR__, "storage_log.txt"), "w")
-
     sources = (prod, bat, H2, impp)
     sinks   = (bat, H2, expp)
 
@@ -255,13 +252,10 @@ function run_system(load::Consumption{}, prod::Production{T}, bat::Battery{T}, H
             H2.E[it]  = H2.E[it-1]
         end
         
-        write(io, @sprintf("%5d  %6.3e  %6.3e\n", it, bat.E[it], H2.E[it]))
-        
-        consumption(load, sources, it, Δt, io)
+        consumption(load, sources, it, Δt)
         production(prod, sinks, it, Δt)
     end
 
-    close(io)
 end
 
 Base.@kwdef mutable struct EnergyParameter{T}
@@ -270,6 +264,7 @@ Base.@kwdef mutable struct EnergyParameter{T}
     bcGWh    :: T = T(100.0)
     hcGWh    :: T = T(200.0)
     icGWh    :: T = T(150.0)
+    ecGWh    :: T = T(50.0)
     bPin     :: T = T(1.0)
     bPout    :: T = T(1.0)
     hPin     :: T = T(50.0)
@@ -280,26 +275,5 @@ Base.@kwdef mutable struct EnergyParameter{T}
     hηout    :: T = T(0.7)
     bE0      :: T = T(50.0)
     hE0      :: T = T(1.0e4)
-end
-
-function compute(x, power_data, nhours, par::EnergyParameter{T}) where T
-    bcap, hcap, op = x[1], x[2], x[3]
-
-    load = Consumption(power_data.Load);
-
-    price_of_MWh = (one(T) + (op-one(T)) * par.pcfactor) * par.pcGWh
-    prod = Production(power_data.WWSBPower*op, op, price_of_MWh);
-    
-    bat  = Battery(nhours,  bcap, par.bPin, par.bPout, par.bηin, par.bηout, par.bcGWh, E0=par.bE0);
-    H2   = Hydrogen(nhours, hcap, par.hPin, par.hPout, par.hηin, par.hηout, par.hcGWh, E0=par.hE0);
-
-    impp = Import(nhours, par.icGWh)
-    expp = Export(nhours)
-
-    run_system(load, prod, bat, H2, impp, expp, Δt=one(T))
-
-    println(@sprintf("(%8.2e  %8.2e  %8.2e)  %16.8e", x[1], x[2], x[3], load.total_cost))
-    
-    abs(load.total_cost), load, prod, bat, H2, impp, expp
 end
 
