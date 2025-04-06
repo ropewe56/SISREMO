@@ -17,14 +17,14 @@ function cost_per_GWh(prod::Production{T}, E::T) where T
     prod.cMWh*1.0e3 * E
 end
 
-mutable struct Consumption{T}
+mutable struct Load{T}
     Et :: Vector{T}
     ΔE :: Vector{T}
     cost :: T
     E :: T
 end
-function Consumption(Et::Vector{T}) where T
-    Consumption(copy(Et), zeros(T, length(Et)), zero(T), zero(T))
+function Load(Et::Vector{T}) where T
+    Load(copy(Et), zeros(T, length(Et)), zero(T), zero(T))
 end
 
 mutable struct Import{T}
@@ -95,7 +95,7 @@ end
 
 
 
-function request_energy(prod::Production{T}, E, it, Δt) where T
+function request_source(prod::Production{T}, E, it, Δt) where T
     if prod.Et[it] >= E
         prod.ΔE[it] = E
     else
@@ -107,7 +107,7 @@ function substract_energy(prod::Production{T}, it) where T
     prod.Et[it] -= prod.ΔE[it]
 end
 
-function request_energy(st::AbstractStorage{T}, E, it, Δt) where T
+function request_source(st::AbstractStorage{T}, E, it, Δt) where T
     function maxenergy_return(e)
         if E/st.ηout <= st.outP*Δt
             st.ΔE[it] = E/st.ηout
@@ -134,7 +134,7 @@ function substract_energy(st::AbstractStorage{T}, it) where T
     st.E[it] -= st.ΔE[it]
 end
 
-function request_energy(imp::Import{T}, E, it, Δt) where T
+function request_source(imp::Import{T}, E, it, Δt) where T
     imp.ΔE[it] = E
     E
 end
@@ -142,7 +142,7 @@ function substract_energy(imp::Import{T}, it) where T
     imp.Et[it] = -imp.ΔE[it]
 end
 
-function energy_to_sink(st::AbstractStorage{T}, E, it) where T
+function request_sink(st::AbstractStorage{T}, E, it) where T
     ΔEmax = st.CAP - st.E[it]
     if ΔEmax > E
         st.ΔE[it] = E
@@ -155,7 +155,7 @@ function add_energy(st::AbstractStorage{T}, it) where T
     st.E[it] += st.ΔE[it] * st.ηin
 end
 
-function energy_to_sink(expp::Export{T}, e, it) where T
+function request_sink(expp::Export{T}, e, it) where T
     expp.ΔE[it] = e
 end
 function add_energy(expp::Export{T}, it) where T
@@ -163,12 +163,12 @@ function add_energy(expp::Export{T}, it) where T
 end
 
 
-function consumption(load::Consumption{T}, sources, it, Δt, io) where T
+function consumption(load::Load{T}, sources, it, Δt, io) where T
     Load0 = load.Et[it]
     Load = 0.0
     for source in sources
         Ereq = max(0.0, Load0 - Load)
-        Emax = request_energy(source, Ereq, it, Δt)
+        Emax = request_source(source, Ereq, it, Δt)
         Load += Emax
         load.cost += cost_per_GWh(source, Emax)
         load.E += Emax
@@ -184,7 +184,7 @@ end
 function production(prod::Production{T}, sinks, it, Δt) where T
     Erest = prod.Et[it]
     for sink in sinks
-        Emax = energy_to_sink(sink, Erest, it)
+        Emax = request_sink(sink, Erest, it)
         prod.Et[it] -= Emax
         Erest = prod.Et[it]
         if Erest <= 0.0
@@ -196,7 +196,7 @@ function production(prod::Production{T}, sinks, it, Δt) where T
     end
 end
 
-function run_system(load::Consumption{}, prod::Production{T}, bat::Battery{T}, H2::Hydrogen{T}, 
+function run_system(load::Load{}, prod::Production{T}, bat::Battery{T}, H2::Hydrogen{T}, 
             impp::Import{T}, expp::Export{T}; Δt=one(T)) where T
     
     io = open("storage_log.txt", "w")
@@ -223,36 +223,36 @@ power_data, ppar = get_power_data();
 nhours = length(power_data.dates)
 
 Base.@kwdef mutable struct EnergyParameter
-    pcfactor = 0.7
-    pcGWh = 60.0
-    bcGWh = 100.0
-    hcGWh = 200.0
-    icGWh = 80.0
-    bPin  = 1.0
-    bPout = 1.0
-    hPin  = 50.0
-    hPout = 100.0
-    bηin  = 0.9
-    bηout = 0.9
-    hηin  = 0.7
-    hηout = 0.7
-    bE0   = 50.0
-    hE0   = 1.0e4
+    prod_cost_factor = 0.7
+    prod_CostGWh = 60.0
+    bat_CostGWh = 100.0
+    H2_CostGWh = 200.0
+    import_CostGWh = 80.0
+    bat_PowerIn  = 1.0
+    bat_PowerOut = 1.0
+    H2_PowerIn  = 50.0
+    H2_PowerOut = 100.0
+    bat_ηin  = 0.9
+    bat_ηout = 0.9
+    H2_ηin  = 0.7
+    H2_ηout = 0.7
+    bat_Einit   = 50.0
+    H2_Einit   = 1.0e4
 end
 
 function compute(x, par)
     bcap, hcap, op = x[1], x[2], x[3]
 
-    load = Consumption(power_data.Load);
+    load = Load(power_data.Load);
 
-    cMWh = (one(T) + (op-one(T)) * par.pcfactor) * par.pcGWh
+    cMWh = (one(T) + (op-one(T)) * par.prod_cost_factor) * par.prod_CostGWh
     prod = Production(power_data.WWSBPower*op, op, cMWh);
     
 
-    bat  = Battery(nhours,  bcap, par.bPin, par.bPout, par.bηin, par.bηout, par.bcGWh, E0=par.bE0);
-    H2   = Hydrogen(nhours, hcap, par.hPin, par.hPout, par.hηin, par.hηout, par.hcGWh, E0=par.hE0);
+    bat  = Battery(nhours,  bcap, par.bat_PowerIn, par.bat_PowerOut, par.bat_ηin, par.bat_ηout, par.bat_CostGWh, E0=par.bat_Einit);
+    H2   = Hydrogen(nhours, hcap, par.H2_PowerIn, par.H2_PowerOut, par.H2_ηin, par.H2_ηout, par.H2_CostGWh, E0=par.H2_Einit);
 
-    impp = Import(nhours, par.icGWh)
+    impp = Import(nhours, par.import_CostGWh)
     expp = Export(nhours)
 
     run_system(load, prod, bat, H2, impp, expp, Δt=one(T))

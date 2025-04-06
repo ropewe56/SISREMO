@@ -7,21 +7,21 @@ using Optimization, OptimizationOptimJL
 
 # /home/wester/Privat/Obsidian/Energiewende/Energie/Costs.md
 
-include("electric_grid.jl")
+include("electric_grid_ut.jl")
 
 function compute(x, power_data, nhours, par::EnergyParameter{T}) where T
     bcap, hcap, op = x[1], x[2], x[3]
 
-    load = Consumption(power_data.Load);
+    load = Load(power_data.Load);
 
-    price_of_MWh = (one(T) + (op-one(T)) * par.pcfactor) * par.pcGWh
+    price_of_MWh = (one(T) + (op-one(T)) * par.prod_cost_factor) * par.prod_CostGWh
     prod = Production(power_data.WWSBPower*op, op, price_of_MWh);
     
-    bat  = make_battery(nhours,  bcap, par.bPin, par.bPout, par.bηin, par.bηout, par.bcGWh, par.bE0);
-    H2   = make_hydrogen(nhours, hcap, par.hPin, par.hPout, par.hηin, par.hηout, par.hcGWh, par.hE0);
+    bat  = make_battery(nhours,  bcap, par.bat_PowerIn, par.bat_PowerOut, par.bat_ηin, par.bat_ηout, par.bat_CostGWh, par.bat_Einit);
+    H2   = make_hydrogen(nhours, hcap, par.H2_PowerIn, par.H2_PowerOut, par.H2_ηin, par.H2_ηout, par.H2_CostGWh, par.H2_Einit);
 
-    impp = Import(nhours, par.icGWh)
-    expp = Export(nhours, par.ecGWh)
+    impp = Import(nhours, par.import_CostGWh)
+    expp = Export(nhours, par.export_CostGWh)
     
     Δt = one(T)
     run_system(load, prod, bat, H2, impp, expp, Δt)
