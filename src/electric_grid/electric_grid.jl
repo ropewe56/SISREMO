@@ -6,12 +6,13 @@ include("power_data.jl")
 mutable struct Load{T}
     Et :: Vector{T}
     ΔE :: Vector{T}
+    C  :: Vector{T}
     total_cost :: T
     total_energy :: T
 end
 
 function Load(Et::Vector{T}) where T
-    Load(copy(Et), zeros(T, length(Et)), zero(T), zero(T))
+    Load(copy(Et), zeros(T, length(Et)), zeros(T, length(Et)), zero(T), zero(T))
 end
 
 function add_cost(load::Load{T}, val) where T
@@ -29,52 +30,30 @@ mutable struct Production{T}
     Et :: Vector{T}
     ΔE :: Vector{T}
     C  :: Vector{T}
-    price_of_MWh :: T
+    C_GWh :: T
 end
 
 function Production(Et::Vector{T}, price_of_MWh::T) where T
-    Production(copy(Et), zeros(T,length(Et)), zeros(T,length(Et)), price_of_MWh)
+    Production(copy(Et), zeros(T,length(Et)), zeros(T,length(Et)), price_of_MWh*1.0e3)
 end
 
-function energy_cost(prod::Production{T}, E::T, it) where T
-    prod.C[it] = prod.price_of_MWh*1.0e3 * E
-    prod.C[it]
-end
-
-function request_source(prod::Production{T}, E::T, it::Int64, Δt::T) where T
-    if it == 178
-        @infoe it, typeof(prod), E, prod.Et[it]
-    end
-    if prod.Et[it] >= E
-        prod.ΔE[it] = E
-    else
-        prod.ΔE[it] = prod.Et[it]
-    end
-    prod.ΔE[it]
-end
-
-function request_source(prod::Production{T}, E::T, it::Int64, Δt::T) where T
-    if it == 178
-        @infoe it, typeof(prod), E, prod.Et[it]
-    end
-    if prod.Et[it] >= E
-        prod.ΔE[it] = E
-    else
-        prod.ΔE[it] = prod.Et[it]
-    end
-    prod.ΔE[it]
-end
-function substract_energy(prod::Production{T}, it) where T
-    prod.Et[it] -= prod.ΔE[it]
-end
-function substract_from_remaining_energy(prod::Production{T}, it, E::T) where T
-    prod.Et[it] -= E
-end
-function get_energy(prod::Production{T}, it) where T
+function get_energy(prod, it)
     prod.Et[it]
 end
+function reduce_energy(prod, ΔE, it)
+    prod.Et[it] - ΔE
+end
 
+function bill_source(prod::Production{T}, ΔE, ΔC, it) where T
+    prod.Et[it] -= ΔE
+    prod.ΔE[it] += ΔE
+    prod.C[it] = ΔC * ΔE
+end
 
+function request_source(prod::Production{T}, E::T, it::Int64, Δt::T) where T
+    Er = min(E, prod.Et[it])
+    Er, prod.C_GWh
+end
 
 """
     Import
@@ -83,26 +62,23 @@ mutable struct Import{T}
     Et   :: Vector{T}
     ΔE   :: Vector{T}
     C    :: Vector{T}
-    price_of_MWh :: T
+    inP  :: T
+    C_GWh :: T
 end
 
-function Import(n, price_of_MWh)
-    T = typeof(price_of_MWh)
-    Import(zeros(T, n), zeros(T, n), zeros(T, n), price_of_MWh)
+function Import(n, inP::T, price_of_MWh::T) where T
+    Import(zeros(T, n), zeros(T, n), zeros(T, n), inP, price_of_MWh*1.0e3)
 end
 
-function energy_cost(imp::Import{T}, E::T, it) where T
-    imp.C[it] = imp.price_of_MWh*1.0e3 * E
-    imp.C[it]
+function bill_source(imp::Import{T}, ΔE, ΔC, it) where T
+    imp.Et[it] -= ΔE
+    imp.ΔE[it] += ΔE
+    imp.C[it] = ΔC * ΔE
 end
 
 function request_source(imp::Import{T}, E::T, it, Δt::T) where T
-    imp.ΔE[it] = E
-    E
-end
-
-function substract_energy(imp::Import{T}, it) where T
-    imp.Et[it] = -imp.ΔE[it]
+    Er = min(E, imp.inP*Δt)
+    Er, imp.C_GWh
 end
 
 """
@@ -113,29 +89,23 @@ mutable struct Export{T}
     ΔE :: Vector{T}
     C  :: Vector{T}
     outP :: T
-    price_of_MWh :: T
+    C_GWh :: T
 end
 
 function Export(n, outP, price_of_MWh::T) where T
-    Export(zeros(T, n), zeros(T, n), zeros(T, n), outP, price_of_MWh)
+    Export(zeros(T, n), zeros(T, n), zeros(T, n), outP, price_of_MWh*1.0e3)
 end
 
-function energy_cost(expp::Export{T}, E::T, it) where T
-    expp.C[it] = expp.price_of_MWh*1.0e3 * E
-    expp.C[it]
+function bill_sink(expp::Export{T}, ΔE, ΔC, it) where T
+    expp.Et[it] -= ΔE
+    expp.ΔE[it] += ΔE
+    expp.C[it] = ΔC * ΔE
 end
 
 function request_sink(expp::Export{T}, E::T, it, Δt) where T
-    expp.ΔE[it] = min(E, expp.outP/Δt)
-    if it == 12564
-        @infoe it, expp.ΔE[it]
-    end
-    expp.ΔE[it]
+    min(E, expp.outP*Δt), expp.C_GWh
 end
 
-function add_energy(expp::Export{T}, it) where T
-    expp.Et[it] += expp.ΔE[it]
-end
 
 """
     Export
@@ -144,27 +114,21 @@ mutable struct Curtailment{T}
     Et :: Vector{T}
     ΔE :: Vector{T}
     C  :: Vector{T}
-    price_of_MWh :: T
+    C_GWh :: T
 end
 
 function Curtailment(n, price_of_MWh::T) where T
-    Curtailment(zeros(T, n), zeros(T, n), zeros(T, n), price_of_MWh)
+    Curtailment(zeros(T, n), zeros(T, n), zeros(T, n), price_of_MWh*1.0e3)
 end
 
-function energy_cost(ex::Curtailment{T}, E::T, it) where T
-    ex.C[it] = ex.price_of_MWh*1.0e3 * E
-    ex.C[it]
+function bill_sink(curt::Curtailment{T}, ΔE, ΔC, it) where T
+    curt.Et[it] -= ΔE
+    curt.ΔE[it] += ΔE
+    curt.C[it] = ΔC * ΔE
 end
 
-function request_sink(expp::Curtailment{T}, E::T, it, Δt) where T
-    if it == 178
-        @infoe it, E, typeof(expp)
-    end
-    expp.ΔE[it] = E
-end
-
-function add_energy(expp::Curtailment{T}, it) where T
-    expp.Et[it] += expp.ΔE[it]
+function request_sink(curt::Curtailment{T}, E::T, it, Δt) where T
+    E, curt.C_GWh
 end
 
 """
@@ -177,23 +141,20 @@ mutable struct Battery{T} <: AbstractStorage{T}
     E    :: Vector{T}
     ΔEi  :: Vector{T}
     ΔEo  :: Vector{T}
-    C    :: Vector{T}
+    Ci   :: Vector{T}
+    Co   :: Vector{T}
     inP  :: T
     outP :: T
     ηin  :: T
     ηout :: T
-    price_of_MWh :: T 
+    Ci_GWh :: T 
+    Co_GWh :: T 
 end
 
-function make_battery(n::Int64, CAP, inP, outP, ηin, ηout, price_of_MWh, E0::T) where T
+function make_battery(n::Int64, CAP, inP, outP, ηin, ηout, Ci_MWh, Co_MWh, E0::T) where T
     E = zeros(T, n)
     E[1] = E0
-    Battery(CAP, E, zeros(T,n), zeros(T,n), zeros(T,n),inP, outP, ηin, ηout, price_of_MWh)
-end
-
-function energy_cost(bat::Battery{T}, E::T, it) where T
-    bat.C[it] = bat.price_of_MWh*1.0e3 * E
-    bat.C[it]
+    Battery(CAP, E, zeros(T,n), zeros(T,n), zeros(T,n), zeros(T,n), inP, outP, ηin, ηout, Ci_MWh*1.0e3, Co_MWh*1.0e3)
 end
 
 mutable struct Hydrogen{T} <: AbstractStorage{T}
@@ -201,127 +162,137 @@ mutable struct Hydrogen{T} <: AbstractStorage{T}
     E    :: Vector{T}
     ΔEi  :: Vector{T}
     ΔEo  :: Vector{T}
-    C    :: Vector{T}
+    Ci   :: Vector{T}
+    Co   :: Vector{T}
     inP  :: T
     outP :: T
     ηin  :: T
     ηout :: T
-    price_of_MWh :: T
+    Ci_GWh :: T
+    Co_GWh :: T
 end
 
-function make_hydrogen(n::Int64, CAP::T, inP::T, outP::T, ηin::T, ηout::T, price_of_MWh::T, E0::T) where T
+function make_hydrogen(n::Int64, CAP::T, inP::T, outP::T, ηin::T, ηout::T, Ci_MWh::T, Co_MWh::T, E0::T) where T
     E = zeros(T, n)
     E[1] = E0
-    Hydrogen(CAP, E, zeros(T,n), zeros(T,n), zeros(T,n), inP, outP, ηin, ηout, price_of_MWh)
+    Hydrogen(CAP, E, zeros(T,n), zeros(T,n), zeros(T,n), zeros(T,n), inP, outP, ηin, ηout, Ci_MWh, Co_MWh)
 end
 
-function energy_cost(h2::Hydrogen{T}, E::T, it) where T
-    h2.C[it] = h2.price_of_MWh*1.0e3 * E
-    h2.C[it]
+function bill_source(st::AbstractStorage{T}, ΔE, ΔC, it) where T
+    st.E[it] -= ΔE/st.ηout
+    st.ΔEo[it] += ΔE
+    st.Co[it] = ΔC * ΔE
 end
 
 function request_source(st::AbstractStorage{T}, E::T, it, Δt::T) where T
-    function maxenergy_out(E)
-        if E <= st.outP*Δt
-            st.ΔEo[it] = E/st.ηout
-        else
-            st.ΔEo[it] = st.outP*Δt/st.ηout
-        end
-    end
+    Eη_max = st.CAP - st.E[it]
+    Eo_max = min(Eη_max*st.ηout, st.outP*Δt)
 
-    if st.E[it] - E >= zero(T)
-        maxenergy_out(E)
+    Er = if Eo_max < E
+        Eo_max
     else
-        maxenergy_out(st.E[it])
+        E
     end
 
-    if st.E[it] < st.ΔEo[it]        
-        st.ΔEo[it] = st.E[it]
-    end
+    Cr = st.Co_GWh
 
-    st.ΔEo[it] * st.ηout
+    Er, Cr
 end
 
-function substract_energy(st::AbstractStorage{T}, it) where T
-    st.E[it] -= st.ΔEo[it]
+function bill_sink(st::AbstractStorage{T}, ΔE, ΔC, it) where T
+    st.E[it] += ΔE * st.ηin
+    st.ΔEi[it] += ΔE
+    st.Ci[it] = ΔC * ΔE
 end
 
 function request_sink(st::AbstractStorage{T}, E::T, it, Δt::T) where T
-    function maxenergy_in(E)
-        if E <= st.inP*Δt
-            st.ΔEi[it] = E
-        else
-            st.ΔEi[it] = st.inP*Δt
-        end
-    end
+    Eη_max = st.CAP - st.E[it]
+    Ei_max = min(Eη_max/st.ηin, st.inP*Δt)
 
-    ΔEmax_in = st.CAP - st.E[it]
-    if ΔEmax_in > E
-        maxenergy_in(E)
+    Er = if Ei_max < E
+        Ei_max
     else
-        maxenergy_in(ΔEmax_in)
+        E
     end
 
-    st.ΔEi[it]
+    Cr = st.Ci_GWh
+
+    Er, Cr
 end
 
-function add_energy(st::AbstractStorage{T}, it) where T
-    st.ΔEi[it] = st.ΔEi[it] * st.ηin
-    st.E[it] += st.ΔEi[it]
-end
 
 """
     Load
 """
-function consumption(ld::Load{T}, sources, it, Δt::T) where T
-    Load0 = ld.Et[it]
-    Load = 0.0
-    # sources = (prod, bat, H2, impp)
-    for source in sources
-        E_demand = max(0.0, Load0 - Load)
-        Emax = request_source(source, E_demand, it, Δt) + 1.0e-8
-        Load += Emax
-        
-        add_cost(ld, energy_cost(source, Emax, it))
-        add_energy(ld, Emax)
-        if it == 178
-            @infoe it, Load0, Load, typeof(source), E_demand, Emax
-        end
+function consumption(load::Load{T}, sources, it, Δt::T) where T
+    ΔL = load.Et[it]
 
-        if (Load0 - Load) <= 0.0
+    # sources = (prod, bat, H2, impp)
+    Er = Vector{T}(undef, length(sources))
+    Cr = Vector{T}(undef, length(sources))
+    ΔE = zeros(T, length(sources))
+
+    for (i,source) in enumerate(sources)
+        Er[i], Cr[i] = request_source(source, load.Et[it], it, Δt)
+    end
+    ii = sortperm(Cr)
+
+    Cmax = 0.0
+    for i in eachindex(sources)
+        j = ii[i]
+        if Er[j] > ΔL
+            Cmax = Cr[ii[i]]
+            ΔE[j] = ΔL
+            ΔL = 0.0
+        else
+            ΔE[j] = Er[j]
+            ΔL -= Er[j]
+        end
+        if ΔL <= 0.0
             break
         end
     end
 
-    for source in sources
-        substract_energy(source, it)
+    load.C[it] = load.Et[it] * Cmax
+
+    for i in eachindex(sources)
+        j = ii[i]
+        bill_source(sources[j], ΔE[j], Cmax, it)
     end
 end
 
 function production(prod::Production{T}, sinks, it, Δt::T) where T
-    E_remaining = get_energy(prod, it)
+    ΔP = get_energy(prod, it)
 
     # sinks = (bat, H2, expp, curt)
-    for sink in sinks
-        Emax = request_sink(sink, E_remaining, it, Δt)
+    Er = Vector{T}(undef, length(sinks))
+    Cr = Vector{T}(undef, length(sinks))
+    ΔE = zeros(T, length(sinks))
 
-        substract_from_remaining_energy(prod, it, Emax)
-        E_remaining = get_energy(prod, it)
+    for (i,sink) in enumerate(sinks)
+        Er[i], Cr[i] = request_sink(sink, ΔP, it, Δt)
+    end
+    ii = sortperm(Cr)
 
-        if isa(sink, Export)
-            energy_cost(sink, Emax, it)
+    Cmax = 0.0
+    for i in eachindex(sinks)
+        j = ii[i]
+        if Er[j] > ΔP
+            Cmax = Cr[ii[i]]
+            ΔE[j] = ΔP
+            ΔP = 0.0
+        else
+            ΔE[j] = Er[j]
+            ΔP -= Er[j]
         end
-
-        if it == 178
-            @infoe it, typeof(sink), Emax, E_remaining
-        end
-        if E_remaining <= zero(T)
+        if ΔP <= 0.0
             break
         end
     end
 
-    for sink in sinks
-        add_energy(sink, it)
+    for i in eachindex(sinks)
+        j = ii[i]
+        bill_sink(sinks[j], ΔE[j], Cmax, it)
     end
 end
 
@@ -331,6 +302,7 @@ function run_system(load::Load{}, prod::Production{T}, bat::Battery{T}, H2::Hydr
     sources = (prod, bat, H2, impp)
     sinks   = (bat, H2, expp, curt)
 
+    it = 1
     for it in eachindex(load.Et)
         if it > 1
             bat.E[it] = bat.E[it-1]
