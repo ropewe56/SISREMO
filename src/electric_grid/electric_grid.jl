@@ -1,5 +1,3 @@
-include("power_data.jl")
-
 """
     Load
 """
@@ -99,7 +97,7 @@ end
 function bill_sink(expp::Export{T}, ΔE, ΔC, it) where T
     expp.Et[it] -= ΔE
     expp.ΔE[it] += ΔE
-    expp.C[it] = ΔC * ΔE
+    expp.C[it]  -= ΔC * ΔE
 end
 
 function request_sink(expp::Export{T}, E::T, it, Δt) where T
@@ -108,7 +106,7 @@ end
 
 
 """
-    Export
+    Curtailment
 """
 mutable struct Curtailment{T}
     Et :: Vector{T}
@@ -124,11 +122,45 @@ end
 function bill_sink(curt::Curtailment{T}, ΔE, ΔC, it) where T
     curt.Et[it] -= ΔE
     curt.ΔE[it] += ΔE
-    curt.C[it] = ΔC * ΔE
+    curt.C[it] -= ΔC * ΔE
 end
 
 function request_sink(curt::Curtailment{T}, E::T, it, Δt) where T
     E, curt.C_GWh
+end
+
+"""
+    Curtailment
+"""
+mutable struct ResidualLoad{T}
+    Et :: Vector{T}
+    ΔE :: Vector{T}
+    C  :: Vector{T}
+    C_GWh :: T
+end
+
+function ResidualLoad(n, price_of_MWh::T) where T
+    ResidualLoad(zeros(T, n), zeros(T, n), zeros(T, n), price_of_MWh*1.0e3)
+end
+
+function bill_source(res::ResidualLoad{T}, ΔE, ΔC, it) where T
+    res.Et[it] -= ΔE
+    res.ΔE[it] += ΔE
+    res.C[it]  += ΔC * ΔE
+end
+
+function request_source(res::ResidualLoad{T}, E::T, it, Δt::T) where T
+    E, res.C_GWh
+end
+
+function bill_sink(res::ResidualLoad{T}, ΔE, ΔC, it) where T
+    res.Et[it] -= ΔE
+    res.ΔE[it] += ΔE
+    res.C[it]  -= ΔC * ΔE
+end
+
+function request_sink(res::ResidualLoad{T}, E::T, it, Δt) where T
+    E, res.C_GWh
 end
 
 """
@@ -175,7 +207,7 @@ end
 function make_hydrogen(n::Int64, CAP::T, inP::T, outP::T, ηin::T, ηout::T, Ci_MWh::T, Co_MWh::T, E0::T) where T
     E = zeros(T, n)
     E[1] = E0
-    Hydrogen(CAP, E, zeros(T,n), zeros(T,n), zeros(T,n), zeros(T,n), inP, outP, ηin, ηout, Ci_MWh, Co_MWh)
+    Hydrogen(CAP, E, zeros(T,n), zeros(T,n), zeros(T,n), zeros(T,n), inP, outP, ηin, ηout, Ci_MWh*1.0e3, Co_MWh*1.0e3)
 end
 
 function bill_source(st::AbstractStorage{T}, ΔE, ΔC, it) where T
@@ -185,9 +217,9 @@ function bill_source(st::AbstractStorage{T}, ΔE, ΔC, it) where T
 end
 
 function request_source(st::AbstractStorage{T}, E::T, it, Δt::T) where T
-    Eη_max = st.CAP - st.E[it]
-    Eo_max = min(Eη_max*st.ηout, st.outP*Δt)
-
+    Eη_max = st.E[it]*st.ηout
+    Eo_max = min(Eη_max, st.outP*Δt)
+    
     Er = if Eo_max < E
         Eo_max
     else
@@ -202,7 +234,7 @@ end
 function bill_sink(st::AbstractStorage{T}, ΔE, ΔC, it) where T
     st.E[it] += ΔE * st.ηin
     st.ΔEi[it] += ΔE
-    st.Ci[it] = ΔC * ΔE
+    st.Ci[it] -= ΔC * ΔE
 end
 
 function request_sink(st::AbstractStorage{T}, E::T, it, Δt::T) where T
@@ -227,36 +259,38 @@ end
 function consumption(load::Load{T}, sources, it, Δt::T) where T
     ΔL = load.Et[it]
 
-    # sources = (prod, bat, H2, impp)
+    # sources = (prod, bat, H2, impp, res)
     Er = Vector{T}(undef, length(sources))
     Cr = Vector{T}(undef, length(sources))
-    ΔE = zeros(T, length(sources))
-
     for (i,source) in enumerate(sources)
         Er[i], Cr[i] = request_source(source, load.Et[it], it, Δt)
     end
+
     ii = sortperm(Cr)
 
-    Cmax = 0.0
+    ΔE = zeros(T, length(sources))
+    ΔC = zeros(T, length(sources))
     for i in eachindex(sources)
         j = ii[i]
         if Er[j] > ΔL
-            Cmax = Cr[ii[i]]
+            ΔC[j]= Cr[ii[i]]
             ΔE[j] = ΔL
-            ΔL = 0.0
+            ΔL -= ΔE[j]
         else
+            ΔC[j] = Cr[ii[i]]
             ΔE[j] = Er[j]
-            ΔL -= Er[j]
+            ΔL -= ΔE[j]
         end
         if ΔL <= 0.0
             break
         end
     end
-
-    load.C[it] = load.Et[it] * Cmax
-
+    
+    Cmax = maximum(ΔC)
     for i in eachindex(sources)
         j = ii[i]
+        load.ΔE[it]+= ΔE[j]
+        load.C[it] += ΔE[j] * Cmax
         bill_source(sources[j], ΔE[j], Cmax, it)
     end
 end
@@ -272,16 +306,18 @@ function production(prod::Production{T}, sinks, it, Δt::T) where T
     for (i,sink) in enumerate(sinks)
         Er[i], Cr[i] = request_sink(sink, ΔP, it, Δt)
     end
-    ii = sortperm(Cr)
 
-    Cmax = 0.0
+    ii = sortperm(Cr, rev=true)
+
+    Cmin = 0.0
     for i in eachindex(sinks)
         j = ii[i]
         if Er[j] > ΔP
-            Cmax = Cr[ii[i]]
+            Cmin = Cr[ii[i]]
             ΔE[j] = ΔP
             ΔP = 0.0
         else
+            Cmin = Cr[ii[i]]
             ΔE[j] = Er[j]
             ΔP -= Er[j]
         end
@@ -292,14 +328,16 @@ function production(prod::Production{T}, sinks, it, Δt::T) where T
 
     for i in eachindex(sinks)
         j = ii[i]
-        bill_sink(sinks[j], ΔE[j], Cmax, it)
+        prod.ΔE[it]+= ΔE[j]
+        prod.C[it] += ΔE[j] * Cmin
+        bill_sink(sinks[j], ΔE[j], Cmin, it)
     end
 end
 
 function run_system(load::Load{}, prod::Production{T}, bat::Battery{T}, H2::Hydrogen{T}, 
-                    impp::Import{T}, expp::Export{T}, curt::Curtailment{T}, Δt::T) where T
+                    impp::Import{T}, expp::Export{T}, curt::Curtailment{T}, res::ResidualLoad{T}, Δt::T) where T
     
-    sources = (prod, bat, H2, impp)
+    sources = (prod, bat, H2, impp, res)
     sinks   = (bat, H2, expp, curt)
 
     it = 1
