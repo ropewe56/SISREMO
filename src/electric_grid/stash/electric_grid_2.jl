@@ -25,14 +25,14 @@ end
     Production
 """
 mutable struct Production{T}
-    Et    :: Vector{T}
-    ΔE    :: Vector{T}
-    C     :: Vector{T}
+    Et :: Vector{T}
+    ΔE :: Vector{T}
+    C  :: Vector{T}
     C_GWh :: T
 end
 
-function Production(Et::Vector{T}, C_MWh::T) where T
-    Production(copy(Et), zeros(T,length(Et)), zeros(T,length(Et)), C_MWh*1.0e3)
+function Production(Et::Vector{T}, price_of_MWh::T) where T
+    Production(copy(Et), zeros(T,length(Et)), zeros(T,length(Et)), price_of_MWh*1.0e3)
 end
 
 function get_energy(prod, it)
@@ -42,15 +42,15 @@ function reduce_energy(prod, ΔE, it)
     prod.Et[it] - ΔE
 end
 
-function request_source(prod::Production{T}, E::T, it::Int64, Δt::T) where T
-    Er = min(E, prod.Et[it])
-    Er, prod.C_GWh
-end
-
 function bill_source(prod::Production{T}, ΔE, ΔC, it) where T
     prod.Et[it] -= ΔE
     prod.ΔE[it] += ΔE
-    prod.C[it]   = ΔC * ΔE
+    prod.C[it] = ΔC * ΔE
+end
+
+function request_source(prod::Production{T}, E::T, it::Int64, Δt::T) where T
+    Er = min(E, prod.Et[it])
+    Er, prod.C_GWh
 end
 
 """
@@ -71,7 +71,7 @@ end
 function bill_source(imp::Import{T}, ΔE, ΔC, it) where T
     imp.Et[it] -= ΔE
     imp.ΔE[it] += ΔE
-    imp.C[it]   = ΔC * ΔE
+    imp.C[it] = ΔC * ΔE
 end
 
 function request_source(imp::Import{T}, E::T, it, Δt::T) where T
@@ -119,14 +119,14 @@ function Curtailment(n, price_of_MWh::T) where T
     Curtailment(zeros(T, n), zeros(T, n), zeros(T, n), price_of_MWh*1.0e3)
 end
 
-function request_sink(curt::Curtailment{T}, E::T, it, Δt) where T
-    E, curt.C_GWh
-end
-
 function bill_sink(curt::Curtailment{T}, ΔE, ΔC, it) where T
     curt.Et[it] -= ΔE
     curt.ΔE[it] += ΔE
-    curt.C[it]  -= ΔC * ΔE
+    curt.C[it] -= ΔC * ΔE
+end
+
+function request_sink(curt::Curtailment{T}, E::T, it, Δt) where T
+    E, curt.C_GWh
 end
 
 """
@@ -169,49 +169,51 @@ end
 abstract type AbstractStorage{T} end
 
 mutable struct Battery{T} <: AbstractStorage{T}
-    CAP    :: T
-    E      :: Vector{T}
-    ΔEi    :: Vector{T}
-    ΔEo    :: Vector{T}
-    Ci     :: Vector{T}
-    Co     :: Vector{T}
-    inP    :: T
-    outP   :: T
-    ηin    :: T
-    ηout   :: T
+    CAP  :: T
+    E    :: Vector{T}
+    ΔEi  :: Vector{T}
+    ΔEo  :: Vector{T}
+    Ci   :: Vector{T}
+    Co   :: Vector{T}
+    inP  :: T
+    outP :: T
+    ηin  :: T
+    ηout :: T
     Ci_GWh :: T 
     Co_GWh :: T 
-    C0i    :: T 
-    C0o    :: T 
 end
 
-function make_battery(n::Int64, CAP, inP, outP, ηin, ηout, Ci_MWh, Co_MWh, C0i, C0o, E0::T) where T
+function make_battery(n::Int64, CAP, inP, outP, ηin, ηout, Ci_MWh, Co_MWh, E0::T) where T
     E = zeros(T, n)
     E[1] = E0
-    Battery(CAP, E, zeros(T,n), zeros(T,n), zeros(T,n), zeros(T,n), inP, outP, ηin, ηout, Ci_MWh*1.0e3, Co_MWh*1.0e3, C0i*1.0e3, C0o*1.0e3)
+    Battery(CAP, E, zeros(T,n), zeros(T,n), zeros(T,n), zeros(T,n), inP, outP, ηin, ηout, Ci_MWh*1.0e3, Co_MWh*1.0e3)
 end
 
 mutable struct Hydrogen{T} <: AbstractStorage{T}
-    CAP    :: T
-    E      :: Vector{T}
-    ΔEi    :: Vector{T}
-    ΔEo    :: Vector{T}
-    Ci     :: Vector{T}
-    Co     :: Vector{T}
-    inP    :: T
-    outP   :: T
-    ηin    :: T
-    ηout   :: T
+    CAP  :: T
+    E    :: Vector{T}
+    ΔEi  :: Vector{T}
+    ΔEo  :: Vector{T}
+    Ci   :: Vector{T}
+    Co   :: Vector{T}
+    inP  :: T
+    outP :: T
+    ηin  :: T
+    ηout :: T
     Ci_GWh :: T
     Co_GWh :: T
-    C0i    :: T
-    C0o    :: T
 end
 
-function make_hydrogen(n::Int64, CAP::T, inP::T, outP::T, ηin::T, ηout::T, Ci_MWh::T, Co_MWh::T, C0i, C0o, E0::T) where T
+function make_hydrogen(n::Int64, CAP::T, inP::T, outP::T, ηin::T, ηout::T, Ci_MWh::T, Co_MWh::T, E0::T) where T
     E = zeros(T, n)
     E[1] = E0
-    Hydrogen(CAP, E, zeros(T,n), zeros(T,n), zeros(T,n), zeros(T,n), inP, outP, ηin, ηout, Ci_MWh*1.0e3, Co_MWh*1.0e3, C0i*1.0e3, C0o*1.0e3)
+    Hydrogen(CAP, E, zeros(T,n), zeros(T,n), zeros(T,n), zeros(T,n), inP, outP, ηin, ηout, Ci_MWh*1.0e3, Co_MWh*1.0e3)
+end
+
+function bill_source(st::AbstractStorage{T}, ΔE, ΔC, it) where T
+    st.E[it] -= ΔE/st.ηout
+    st.ΔEo[it] += ΔE
+    st.Co[it] = ΔC * ΔE
 end
 
 function request_source(st::AbstractStorage{T}, E::T, it, Δt::T) where T
@@ -229,10 +231,10 @@ function request_source(st::AbstractStorage{T}, E::T, it, Δt::T) where T
     Er, Cr
 end
 
-function bill_source(st::AbstractStorage{T}, ΔE, ΔC, it) where T
-    st.E[it]   -= ΔE/st.ηout
-    st.ΔEo[it] += ΔE
-    st.Co[it]   = ΔC * ΔE
+function bill_sink(st::AbstractStorage{T}, ΔE, ΔC, it) where T
+    st.E[it] += ΔE * st.ηin
+    st.ΔEi[it] += ΔE
+    st.Ci[it] -= ΔC * ΔE
 end
 
 function request_sink(st::AbstractStorage{T}, E::T, it, Δt::T) where T
@@ -249,13 +251,6 @@ function request_sink(st::AbstractStorage{T}, E::T, it, Δt::T) where T
 
     Er, Cr
 end
-
-function bill_sink(st::AbstractStorage{T}, ΔE, ΔC, it) where T
-    st.E[it]   += ΔE * st.ηin
-    st.ΔEi[it] += ΔE
-    st.Ci[it]  -= ΔC * ΔE
-end
-
 
 
 """
@@ -278,9 +273,9 @@ function consumption(load::Load{T}, sources, it, Δt::T) where T
     for i in eachindex(sources)
         j = ii[i]
         if Er[j] > ΔL
-            ΔC[j] = Cr[ii[i]]
+            ΔC[j]= Cr[ii[i]]
             ΔE[j] = ΔL
-            ΔL   -= ΔE[j]
+            ΔL -= ΔE[j]
         else
             ΔC[j] = Cr[ii[i]]
             ΔE[j] = Er[j]

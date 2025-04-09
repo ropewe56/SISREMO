@@ -1,0 +1,27 @@
+using NLopt
+
+function func(x::Vector, grad::Vector)
+    return sqrt(x[2])
+end
+
+opt = NLopt.Opt(:GN_AGS, 3)
+opt = NLopt.Opt(:LN_BOBYQA, 3)
+
+NLopt.lower_bounds!(opt, lb)
+NLopt.upper_bounds!(opt, ub)
+
+NLopt.xtol_rel!(opt, 1e-4)
+NLopt.min_objective!(opt, func)
+
+min_f, min_x, ret = NLopt.optimize(opt, u0)
+
+num_evals = NLopt.numevals(opt)
+
+println(
+    """
+    objective value       : $min_f
+    solution              : $min_x
+    solution status       : $ret
+    # function evaluation : $num_evals
+    """
+)
