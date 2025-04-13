@@ -287,6 +287,13 @@ Base.@kwdef mutable struct EnergyParameter{T}
 
     fcall        :: Int64 = 0
     gcall        :: Int64 = 0
+
+    x      :: Vector{T} = zeros(T, 4)
+    h2od   :: T = 0.0
+    batd   :: T = 0.0
+    minhso :: T = 0.0
+    MINEH2O :: T = 100.0
+    dnorm :: T = 1.0e-4
 end
 
 function create_heatmap(power_data, nhours, p, bcap::T, hcap::T, op::T) where T
@@ -347,24 +354,27 @@ function compute(x, power_data, nhours, p::EnergyParameter{T}, ret=:all) where T
     sr = SimulationResult(power_data.dates, power_data.Load, prod0, load, prod, bat, H2, impp, expp, curt, res)
     t4 = time_ns()
     
+    minhso = minimum(sr.H2O.E) - 10.0
+    h2d    = abs(sr.H2O.E[1] - sr.H2O.E[end]) - 10.0
+    fval   = get_cent_kWh(sr)
+
+    dt = (t2-t1)*1.0e-9 + (t3-t2)*1.0e-9 + (t4-t3)*1.0e-9
+    @printf("[%8.2f, %8.2f, %8.2f], %8.4f,  %10.4f,  %10.4f,   %6.4f\n", x[1], x[2], x[3], 
+                fval, minhso, h2d, dt)
+
     if ret == :all
         return sr
     end
-
-    minEH2O = minimum(sr.H2O.E)
-    fval = abs(get_cent_kWh(sr)) + 0.2*minEH2O/hcap# + (op-1.0)*0.2
-
-    @printf("[%7.2f, %7.2f, %4.2f], %6.4f, %6.4f, %6.4f, %6.4f\n", x[1], x[2], x[3], fval, (t2-t1)*1.0e-9, (t3-t2)*1.0e-9, (t4-t3)*1.0e-9)
-    
-
-    fval
 end
 
 function comp(x, power_data, nhours, p)
     sr = compute(x, power_data, nhours, p);
+
     minEH2O = minimum(sr.H2O.E)
     maxRes = maximum(sr.Res.ΔE)
     print_results(sr)
+    
+    sr.H2O.E[1] - sr.H2O.E[end]
 
     @printf("\n")
     @printf("C kWh   = %6.4f\n", get_cent_kWh(sr))
@@ -375,17 +385,70 @@ function comp(x, power_data, nhours, p)
     sr
 end
 
+function make_funcs(power_data, nhours, p)
+    function iseq(x1, x2)
+        #lb = [T( 10.0), T(2.0e3), T(1.0), 1.0e3]
+        (x1[1] - x2[1])^2 + ((x1[2] - x2[2])*10.0)^2 + ((x1[3] - x2[3])*1.0e2)^2 + ((x1[4] - x2[4])^2)
+    end
+
+    function objective_fn(x, g)
+        sr = compute(x, power_data, nhours, p, :all)
+        #p.x  = x
+        #p.h2od = -abs(sr.H2O.E[1] - sr.H2O.E[end])
+        #p.batd = -abs(sr.Bat.E[1] - sr.Bat.E[end])
+        #p.minhso = minimum(sr.H2O.E) + p.MINEH2O
+        abs(get_cent_kWh(sr))
+    end
+
+    function constraint_fn1(x, g)
+        #if iseq(x, p.x) >p.dnorm
+            sr = compute(x, power_data, nhours, p, :all)
+            #p.x  = x
+            h2od = abs(sr.H2O.E[1] - sr.H2O.E[end]) - 10.0
+            #p.batd = -(sr.Bat.E[1] - sr.Bat.E[end])
+            #p.minhso = minimum(sr.H2O.E) + p.MINEH2O
+        #end
+        h2od
+    end
+        
+    function constraint_fn2(x, g)
+        #if iseq(x, p.x) > p.dnorm
+            sr = compute(x, power_data, nhours, p, :all)
+            p.x  = x
+            p.h2od = -abs(sr.H2O.E[1] - sr.H2O.E[end])
+            p.batd = -abs(sr.Bat.E[1] - sr.Bat.E[end])
+            p.minhso = minimum(sr.H2O.E) - 10.0
+        #end
+        p.batd
+    end
+
+    function constraint_fn3(x, g)
+        #if iseq(x, p.x) > p.dnorm
+            sr = compute(x, power_data, nhours, p, :all)
+            #p.x  = x
+            #h2od = -(sr.H2O.E[1] - sr.H2O.E[end])^2
+            #p.batd = -(sr.Bat.E[1] - sr.Bat.E[end])^2
+            minhso = minimum(sr.H2O.E) - 10.0
+        #end
+        minhso
+    end
+    objective_fn, constraint_fn1, constraint_fn2, constraint_fn3
+end
+
 function find_optimum(lb, ub, u0, power_data, nhours, p)
-    func(x, y) = compute(x, power_data, nhours, p, :single)
 
     opt = NLopt.Opt(:GN_AGS, 3)
-    opt = NLopt.Opt(:LN_BOBYQA, 3)
+    #opt = NLopt.Opt(:LN_BOBYQA, 4)
 
     NLopt.lower_bounds!(opt, lb)
     NLopt.upper_bounds!(opt, ub)
 
+    objective_fn, constraint_fn1, constraint_fn2, constraint_fn3 = make_funcs(power_data, nhours, p)
+    #NLopt.inequality_constraint!(opt, constraint_fn1, 1e-8)
+    NLopt.inequality_constraint!(opt, constraint_fn3, 1e-8)
+
     NLopt.xtol_rel!(opt, 1e-4)
-    NLopt.min_objective!(opt, func)
+    NLopt.min_objective!(opt, objective_fn)
 
     min_f, min_x, ret = NLopt.optimize(opt, u0)
     num_evals = NLopt.numevals(opt)
@@ -405,14 +468,14 @@ power_data = load_detrended_power_data("save_detrended_power_data.hdf5");
 nhours = length(power_data.dates)
 p = EnergyParameter{Float64}()
 
-lb = [T( 10.0), T(2.0e3), T(1.0)]
-ub = [T(1.0e3), T(5.0e4), T(1.3)]
+lb = [T( 10.0), T(2.0e3), T(1.0)]#, T(2.0e2)]
+ub = [T(1.0e3), T(5.0e4), T(1.3)]#, T(5.0e4)]
 λ = 0.5
 u0 = [((1.0-λ)*lb[i] + λ*ub[i]) for i in 1:3]
 
 min_x, min_f, sr = find_optimum(lb, ub, u0, power_data, nhours, p);
 
-x = min_x .+ [0.0,0.0, 0.2]
+x = min_x .+ [0.0, 0.0, 0.2, 0.0]
 compute(x, power_data, nhours, p, :single)
 comp(x, power_data, nhours, p);
 
