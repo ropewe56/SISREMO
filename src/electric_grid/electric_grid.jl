@@ -57,10 +57,10 @@ end
     Import
 """
 mutable struct Import{T}
-    Et   :: Vector{T}
-    ΔE   :: Vector{T}
-    C    :: Vector{T}
-    inP  :: T
+    Et    :: Vector{T}
+    ΔE    :: Vector{T}
+    C     :: Vector{T}
+    inP   :: T
     C_GWh :: T
 end
 
@@ -304,6 +304,7 @@ function production(prod::Production{T}, sinks, it, Δt::T) where T
     ΔP = get_energy(prod, it)
 
     # sinks = (bat, H2, expp, curt)
+    sinks2 = sinks[1:3]
     Er = Vector{T}(undef, length(sinks))
     Cr = Vector{T}(undef, length(sinks))
     ΔE = zeros(T, length(sinks))
@@ -336,6 +337,12 @@ function production(prod::Production{T}, sinks, it, Δt::T) where T
         prod.ΔE[it]+= ΔE[j]
         prod.C[it] += ΔE[j] * Cmin
         bill_sink(sinks[j], ΔE[j], Cmin, it)
+    end
+    if prod.Et[it] > 0.0
+        Er, Cr = request_sink(sinks[4], prod.Et[it], it, Δt)
+        prod.ΔE[it]-= Er
+        prod.C[it] += Cr
+        bill_sink(sinks[4], Er, Cr, it)
     end
 end
 

@@ -84,17 +84,17 @@ function SimulationResult(dates, Load0, Prod0, Load, Prod, Bat, H2O, Imp, Exp, C
     E_Imp   = sum(Imp.ΔE) /years/_TWh
     E_Exp   = sum(Exp.ΔE) /years/_TWh
     E_Cur   = sum(Cur.ΔE) /years/_TWh
-    E_Res   = sum(Res.ΔE)  /years/_TWh
+    E_Res   = sum(Res.ΔE) /years/_TWh
 
     C_Load  = sum(Load.C) /years
     C_Prod  = sum(Prod.C) /years
     C_Bato  = sum(Bat.Co) /years
-    C_H2Oo  = sum(H2O.Co)  /years
-    C_Imp   = sum(Imp.C) /years
+    C_H2Oo  = sum(H2O.Co) /years
+    C_Imp   = sum(Imp.C)  /years
 
     C_Bati  = sum(Bat.Ci) /years
-    C_H2Oi  = sum(H2O.Ci)  /years
-    C_Exp   = sum(Exp.C) /years
+    C_H2Oi  = sum(H2O.Ci) /years
+    C_Exp   = sum(Exp.C)  /years
 
     C_Cur   = sum(Cur.C) /years
     C_Res   = sum(Res.C) /years
@@ -282,18 +282,18 @@ Base.@kwdef mutable struct EnergyParameter{T}
     Exp_CMWh     :: T = T(5.0)
     Exp_Pout     :: T = T(10.0)
 
-    Cur_CMWh     :: T = T(5.0)
+    Cur_CMWh     :: T = T(-500.0)
     Res_CMWh     :: T = T(300000.0)
 
     fcall        :: Int64 = 0
     gcall        :: Int64 = 0
 
-    x      :: Vector{T} = zeros(T, 4)
-    h2od   :: T = 0.0
-    batd   :: T = 0.0
-    minhso :: T = 0.0
-    MINEH2O :: T = 100.0
-    dnorm :: T = 1.0e-4
+    x            :: Vector{T} = zeros(T, 4)
+    h2od         :: T = 0.0
+    batd         :: T = 0.0
+    minhso       :: T = 0.0
+    MINEH2O      :: T = 100.0
+    dnorm        :: T = 1.0e-4
 end
 
 function create_heatmap(power_data, nhours, p, bcap::T, hcap::T, op::T) where T
@@ -312,7 +312,7 @@ function create_heatmap(power_data, nhours, p, bcap::T, hcap::T, op::T) where T
     cost
 end
 
-function compute(x, power_data, nhours, p::EnergyParameter{T}, ret=:all) where T
+function compute(x, power_data, nhours, p::EnergyParameter{T}) where T
     t1 = time_ns()
 
     bcap, hcap, op = x[1], x[2], x[3]
@@ -329,7 +329,7 @@ function compute(x, power_data, nhours, p::EnergyParameter{T}, ret=:all) where T
     years = Dates.value(power_data.dates[end] - power_data.dates[1])/(3600*1.0e3)/(365.0*24.0)
 
     #price_of_MWh = (one(T) + (op-one(T)) * p.prod_cost_factor) * p.prod_CostGWh
-    prod0 = power_data.WWSBPower.*op
+    prod0 = power_data.WWSBPower .* op
     prod  = Production(copy(prod0), p.Pro_CMWh);
 
     #ΔP = @. prod0 - load.Et# + (p.H2O_Pout + p.Exp_Pout)
@@ -347,10 +347,8 @@ function compute(x, power_data, nhours, p::EnergyParameter{T}, ret=:all) where T
     Δt = one(T)
 
     t2 = time_ns()
-
     run_system(load, prod, bat, H2, impp, expp, curt, res, Δt)
     t3 = time_ns()
-
     sr = SimulationResult(power_data.dates, power_data.Load, prod0, load, prod, bat, H2, impp, expp, curt, res)
     t4 = time_ns()
     
@@ -358,13 +356,11 @@ function compute(x, power_data, nhours, p::EnergyParameter{T}, ret=:all) where T
     h2d    = abs(sr.H2O.E[1] - sr.H2O.E[end]) - 10.0
     fval   = get_cent_kWh(sr)
 
-    dt = (t2-t1)*1.0e-9 + (t3-t2)*1.0e-9 + (t4-t3)*1.0e-9
-    @printf("[%8.2f, %8.2f, %8.2f], %8.4f,  %10.4f,  %10.4f,   %6.4f\n", x[1], x[2], x[3], 
-                fval, minhso, h2d, dt)
+    #dt = (t2-t1)*1.0e-9 + (t3-t2)*1.0e-9 + (t4-t3)*1.0e-9
+    @printf("[%8.2f, %8.2f, %8.2f] ", x[1], x[2], x[3])
+    @printf("%8.4f,  %10.4f,  %10.4f, %10.4f\n", fval, sum(sr.Res.ΔE), minhso, h2d)
 
-    if ret == :all
-        return sr
-    end
+    sr
 end
 
 function comp(x, power_data, nhours, p)
@@ -374,65 +370,66 @@ function comp(x, power_data, nhours, p)
     maxRes = maximum(sr.Res.ΔE)
     print_results(sr)
     
-    sr.H2O.E[1] - sr.H2O.E[end]
-
     @printf("\n")
     @printf("C kWh   = %6.4f\n", get_cent_kWh(sr))
     @printf("minEH2O = %8.2e\n", minEH2O)
+    @printf("ΔH2O    = %8.2e\n", sr.H2O.E[1] - sr.H2O.E[end])
     @printf("maxRes  = %8.2e\n", maxRes)
     @printf("\n")
 
     sr
 end
 
-function make_funcs(power_data, nhours, p)
-    function iseq(x1, x2)
-        #lb = [T( 10.0), T(2.0e3), T(1.0), 1.0e3]
-        (x1[1] - x2[1])^2 + ((x1[2] - x2[2])*10.0)^2 + ((x1[3] - x2[3])*1.0e2)^2 + ((x1[4] - x2[4])^2)
+import FiniteDifferences
+function make_funcs(power_data, nhours, p)print_results(sr)
+
+
+    fdm = FiniteDifferences.central_fdm(3, 1)
+    
+    function fn(x, p)
+        sr = compute(x, power_data, nhours, p)
+        r = abs(get_cent_kWh(sr))
+        @infoe x, r
+        r
     end
 
-    function objective_fn(x, g)
-        sr = compute(x, power_data, nhours, p, :all)
-        #p.x  = x
-        #p.h2od = -abs(sr.H2O.E[1] - sr.H2O.E[end])
-        #p.batd = -abs(sr.Bat.E[1] - sr.Bat.E[end])
-        #p.minhso = minimum(sr.H2O.E) + p.MINEH2O
-        abs(get_cent_kWh(sr))
+    function fnd(x)
+        sr = compute(x, power_data, nhours, p)
+        r = abs(get_cent_kWh(sr))
+        @infoe x, r
+        r
     end
 
-    function constraint_fn1(x, g)
-        #if iseq(x, p.x) >p.dnorm
-            sr = compute(x, power_data, nhours, p, :all)
-            #p.x  = x
-            h2od = abs(sr.H2O.E[1] - sr.H2O.E[end]) - 10.0
-            #p.batd = -(sr.Bat.E[1] - sr.Bat.E[end])
-            #p.minhso = minimum(sr.H2O.E) + p.MINEH2O
-        #end
-        h2od
+    function fngrad(G, x, p)
+        δ = x .* 1.0e-6
+
+        f0 = fn(x, p)
+        x[1] = x[1] + δ[1]
+        f1 = fn(x, p)
+        x[1] = x[1] - δ[1]
+        x[2] = x[2] + δ[2]
+        f2 = fn(x, p)
+        x[2] = x[2] - δ[2]
+        x[3] = x[3] + δ[3]
+        f3 = fn(x, p)
+        x[3] = x[3] - δ[3]
+
+        G[1] = (f1-f0)/δ[1]
+        G[2] = (f2-f0)/δ[2]
+        G[3] = (f3-f0)/δ[3]
+
+        @infoe x, G
+        #G .= FiniteDifferences.grad(fdm, fnd, x)
+        #@infoe x, G
+    end
+
+    function fncons(x, p)
+        sr = compute(x, power_data, nhours, p)
+        res[1] = abs(sr.H2O.E[1] - sr.H2O.E[end])
+        #res[2] = minimum(sr.H2O.E)
     end
         
-    function constraint_fn2(x, g)
-        #if iseq(x, p.x) > p.dnorm
-            sr = compute(x, power_data, nhours, p, :all)
-            p.x  = x
-            p.h2od = -abs(sr.H2O.E[1] - sr.H2O.E[end])
-            p.batd = -abs(sr.Bat.E[1] - sr.Bat.E[end])
-            p.minhso = minimum(sr.H2O.E) - 10.0
-        #end
-        p.batd
-    end
-
-    function constraint_fn3(x, g)
-        #if iseq(x, p.x) > p.dnorm
-            sr = compute(x, power_data, nhours, p, :all)
-            #p.x  = x
-            #h2od = -(sr.H2O.E[1] - sr.H2O.E[end])^2
-            #p.batd = -(sr.Bat.E[1] - sr.Bat.E[end])^2
-            minhso = minimum(sr.H2O.E) - 10.0
-        #end
-        minhso
-    end
-    objective_fn, constraint_fn1, constraint_fn2, constraint_fn3
+    fn, fngrad, fncons
 end
 
 function find_optimum(lb, ub, u0, power_data, nhours, p)
@@ -445,7 +442,7 @@ function find_optimum(lb, ub, u0, power_data, nhours, p)
 
     objective_fn, constraint_fn1, constraint_fn2, constraint_fn3 = make_funcs(power_data, nhours, p)
     #NLopt.inequality_constraint!(opt, constraint_fn1, 1e-8)
-    NLopt.inequality_constraint!(opt, constraint_fn3, 1e-8)
+    #NLopt.inequality_constraint!(opt, constraint_fn3, 1e-8)
 
     NLopt.xtol_rel!(opt, 1e-4)
     NLopt.min_objective!(opt, objective_fn)
@@ -468,16 +465,22 @@ power_data = load_detrended_power_data("save_detrended_power_data.hdf5");
 nhours = length(power_data.dates)
 p = EnergyParameter{Float64}()
 
+
+x = [2.0e3, 1.6e4, 1.5]
+sr = compute(x, power_data, nhours, p);
+abs(get_cent_kWh(sr))
+
+print_results(sr)
+
 lb = [T( 10.0), T(2.0e3), T(1.0)]#, T(2.0e2)]
 ub = [T(1.0e3), T(5.0e4), T(1.3)]#, T(5.0e4)]
-λ = 0.5
+λ  = 0.5
 u0 = [((1.0-λ)*lb[i] + λ*ub[i]) for i in 1:3]
 
 min_x, min_f, sr = find_optimum(lb, ub, u0, power_data, nhours, p);
 
 x = min_x .+ [0.0, 0.0, 0.2, 0.0]
-compute(x, power_data, nhours, p, :single)
-comp(x, power_data, nhours, p);
+sr = compute(x, power_data, nhours, p)
 
 #plot_all(sr)
 
@@ -486,3 +489,16 @@ comp(x, power_data, nhours, p);
 #inner_optimizer = NelderMead()
 #sol1 = optimize(func, lb, ub, u0, Fminbox(inner_optimizer)) #f_reltol = 0.01))#, x_abstol=1.0e-5, iterations=200))
 #u1 = Optim.minimizer(sol1)
+
+using Optimization
+using OptimizationNLopt
+
+fn, fngrad, fncons = make_funcs(power_data, nhours, p);
+optf = OptimizationFunction(fn, grad=fngrad);#, cons=fncons);
+prob = OptimizationProblem(optf, u0, p, lb = lb, ub = ub)
+sol = solve(prob, Opt(:LD_LBFGS, 3))
+G = zeros(3)
+fngrad(G, u0, p)
+
+
+plot_results(sr)
