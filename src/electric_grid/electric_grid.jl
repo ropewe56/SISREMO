@@ -25,14 +25,16 @@ end
     Production
 """
 mutable struct Production{T}
+    Et0   :: Vector{T}
     Et    :: Vector{T}
     ΔE    :: Vector{T}
-    C     :: Vector{T}
+    Co    :: Vector{T}
+    Ci    :: Vector{T}
     C_GWh :: T
 end
 
 function Production(Et::Vector{T}, C_MWh::T) where T
-    Production(copy(Et), zeros(T,length(Et)), zeros(T,length(Et)), C_MWh*1.0e3)
+    Production(copy(Et), copy(Et), zeros(T,length(Et)), zeros(T,length(Et)), zeros(T,length(Et)), C_MWh*1.0e3)
 end
 
 function get_energy(prod, it)
@@ -50,7 +52,7 @@ end
 function bill_source(prod::Production{T}, ΔE, ΔC, it) where T
     prod.Et[it] -= ΔE
     prod.ΔE[it] += ΔE
-    prod.C[it]   = ΔC * ΔE
+    prod.Co[it]  = ΔC * ΔE
 end
 
 """
@@ -83,10 +85,10 @@ end
     Export
 """
 mutable struct Export{T}
-    Et :: Vector{T}
-    ΔE :: Vector{T}
-    C  :: Vector{T}
-    outP :: T
+    Et    :: Vector{T}
+    ΔE    :: Vector{T}
+    C     :: Vector{T}
+    outP  :: T
     C_GWh :: T
 end
 
@@ -97,7 +99,7 @@ end
 function bill_sink(expp::Export{T}, ΔE, ΔC, it) where T
     expp.Et[it] -= ΔE
     expp.ΔE[it] += ΔE
-    expp.C[it]  -= ΔC * ΔE
+    expp.C[it]   = ΔC * ΔE
 end
 
 function request_sink(expp::Export{T}, E::T, it, Δt) where T
@@ -109,9 +111,9 @@ end
     Curtailment
 """
 mutable struct Curtailment{T}
-    Et :: Vector{T}
-    ΔE :: Vector{T}
-    C  :: Vector{T}
+    Et    :: Vector{T}
+    ΔE    :: Vector{T}
+    C     :: Vector{T}
     C_GWh :: T
 end
 
@@ -126,16 +128,16 @@ end
 function bill_sink(curt::Curtailment{T}, ΔE, ΔC, it) where T
     curt.Et[it] -= ΔE
     curt.ΔE[it] += ΔE
-    curt.C[it]  -= ΔC * ΔE
+    curt.C[it]  += ΔC * ΔE
 end
 
 """
     Curtailment
 """
 mutable struct ResidualLoad{T}
-    Et :: Vector{T}
-    ΔE :: Vector{T}
-    C  :: Vector{T}
+    Et    :: Vector{T}
+    ΔE    :: Vector{T}
+    C     :: Vector{T}
     C_GWh :: T
 end
 
@@ -156,7 +158,7 @@ end
 function bill_sink(res::ResidualLoad{T}, ΔE, ΔC, it) where T
     res.Et[it] -= ΔE
     res.ΔE[it] += ΔE
-    res.C[it]  -= ΔC * ΔE
+    res.C[it]  += ΔC * ΔE
 end
 
 function request_sink(res::ResidualLoad{T}, E::T, it, Δt) where T
@@ -169,20 +171,20 @@ end
 abstract type AbstractStorage{T} end
 
 mutable struct Battery{T} <: AbstractStorage{T}
-    CAP    :: T
-    E      :: Vector{T}
-    ΔEi    :: Vector{T}
-    ΔEo    :: Vector{T}
-    Ci     :: Vector{T}
-    Co     :: Vector{T}
-    inP    :: T
-    outP   :: T
-    ηin    :: T
-    ηout   :: T
-    Ci_GWh :: T 
-    Co_GWh :: T 
-    C0i    :: T 
-    C0o    :: T 
+    CAP    :: T         # storage capacity
+    E      :: Vector{T} # storage fill level
+    ΔEi    :: Vector{T} # inflow at it
+    ΔEo    :: Vector{T} # outflow at it
+    Ci     :: Vector{T} # cost at it
+    Co     :: Vector{T} # profit at it
+    inP    :: T         # max in power
+    outP   :: T         # max out power
+    ηin    :: T         # in efficiency
+    ηout   :: T         # out efficiency
+    Ci_GWh :: T         # prize for inflow 
+    Co_GWh :: T         # prize for outflow 
+    C0i    :: T         # ?
+    C0o    :: T         # ? 
 end
 
 function make_battery(n::Int64, CAP, inP, outP, ηin, ηout, Ci_MWh, Co_MWh, C0i, C0o, E0::T) where T
@@ -253,7 +255,7 @@ end
 function bill_sink(st::AbstractStorage{T}, ΔE, ΔC, it) where T
     st.E[it]   += ΔE * st.ηin
     st.ΔEi[it] += ΔE
-    st.Ci[it]  -= ΔC * ΔE
+    st.Ci[it]  += ΔC * ΔE
 end
 
 
@@ -300,11 +302,12 @@ function consumption(load::Load{T}, sources, it, Δt::T) where T
     end
 end
 
-function production(prod::Production{T}, sinks, it, Δt::T) where T
+function production(prod::Production{T}, load, sinks4, it, Δt::T) where T
     ΔP = get_energy(prod, it)
 
     # sinks = (bat, H2, expp, curt)
-    sinks2 = sinks[1:3]
+    sinks = sinks4[1:3]
+    curt  = sinks4[4]
     Er = Vector{T}(undef, length(sinks))
     Cr = Vector{T}(undef, length(sinks))
     ΔE = zeros(T, length(sinks))
@@ -334,15 +337,16 @@ function production(prod::Production{T}, sinks, it, Δt::T) where T
 
     for i in eachindex(sinks)
         j = ii[i]
-        prod.ΔE[it]+= ΔE[j]
-        prod.C[it] += ΔE[j] * Cmin
+        prod.ΔE[it] += ΔE[j]
+        prod.Ci[it] += ΔE[j] * Cmin
         bill_sink(sinks[j], ΔE[j], Cmin, it)
     end
+
     if prod.Et[it] > 0.0
-        Er, Cr = request_sink(sinks[4], prod.Et[it], it, Δt)
-        prod.ΔE[it]-= Er
-        prod.C[it] += Cr
-        bill_sink(sinks[4], Er, Cr, it)
+        Er, Cr = request_sink(curt, prod.Et[it], it, Δt)
+        prod.ΔE[it] += Er
+        prod.Ci[it] += Cr
+        bill_sink(curt, Er, Cr, it)
     end
 end
 
@@ -360,7 +364,7 @@ function run_system(load::Load{}, prod::Production{T}, bat::Battery{T}, H2::Hydr
         end
         
         consumption(load, sources, it, Δt)
-        production(prod, sinks, it, Δt)
+        production(prod, load, sinks, it, Δt)
     end
 
 end
