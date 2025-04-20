@@ -26,8 +26,8 @@ include("electric_grid.jl")
 const _TWh = 1.0e3
 
 struct SimulationResult
-    Load0
-    Prod0 
+    dates
+
     Load
     Prod
     Bat
@@ -37,180 +37,235 @@ struct SimulationResult
     Cur
     Res
 
-    dates
+    ELoad0 
+    EProd0 
 
-    E_Load0
-    E_Load 
-    E_Prod0
-    E_Prod 
-    E_Bato  
-    E_H2Oo  
-    E_Imp 
-    E_Res
-
-    E_Bati
-    E_H2Oi 
-    E_Exp 
-    E_Cur 
-
-    C_Load 
-    C_Prodo
-    C_Prodi
-    C_Bato
-    C_H2Oo
-    C_Imp 
-    C_Res
-
-    C_Bati
-    C_H2Oi
-    C_Exp 
-    C_Cur 
+    sumELoad0
+    sumEProd0
+    sumLoadΔE
+    sumProdΔEl
+    sumProdΔEp
+    sumBatΔEi 
+    sumBatΔEo 
+    sumH2OΔEi 
+    sumH2OΔEo 
+    sumImpΔE  
+    sumExpΔE  
+    sumCurΔE  
+    sumResΔE  
+    sumLoadC  
+    sumProdCl 
+    sumProdCp 
+    sumBatCo  
+    sumH2OCo  
+    sumImpC   
+    sumBatCi  
+    sumH2OCi  
+    sumExpC   
+    sumCurC   
+    sumResC   
 end
 
-function SimulationResult(dates, Load0, Prod0, Load, Prod, Bat, H2O, Imp, Exp, Cur, Res)
-    years = Dates.value(dates[end] - dates[1])/(3600*1.0e3)/(365.0*24.0)
+function scale_values(years, Load0, Prod0, Load, Prod, Bat, H2O, Imp, Exp, Cur, Res)
+    yearsTWh  = years * _TWh
     
-    E_Load0 = sum(Load0)   / years/_TWh
-    E_Load  = sum(Load.ΔE) / years/_TWh
+    Load0    .= Load0    ./ yearsTWh
+    Prod0    .= Prod0    ./ yearsTWh
+    Load.ΔE  .= Load.ΔE  ./ yearsTWh
+    Prod.ΔEl .= Prod.ΔEl ./ yearsTWh
+    Prod.ΔEp .= Prod.ΔEp ./ yearsTWh
+    Bat.ΔEi  .= Bat.ΔEi  ./ yearsTWh
+    Bat.ΔEo  .= Bat.ΔEo  ./ yearsTWh
+    H2O.ΔEi  .= H2O.ΔEi  ./ yearsTWh
+    H2O.ΔEo  .= H2O.ΔEo  ./ yearsTWh
+    Imp.ΔE   .= Imp.ΔE   ./ yearsTWh
+    Exp.ΔE   .= Exp.ΔE   ./ yearsTWh
+    Cur.ΔE   .= Cur.ΔE   ./ yearsTWh
+    Res.ΔE   .= Res.ΔE   ./ yearsTWh
+
+    Load.C   .= Load.C   ./ years
+    Prod.Cl  .= Prod.Cl  ./ years
+    Prod.Cp  .= Prod.Cp  ./ years
+    Bat.Co   .= Bat.Co   ./ years
+    H2O.Co   .= H2O.Co   ./ years
+    Imp.C    .= Imp.C    ./ years
+    Bat.Ci   .= Bat.Ci   ./ years
+    H2O.Ci   .= H2O.Ci   ./ years
+    Exp.C    .= Exp.C    ./ years
+    Cur.C    .= Cur.C    ./ years
+    Res.C    .= Res.C    ./ years
+end
+
+function SimulationResult(dates, ELoad0, EProd0, Load, Prod, Bat, H2O, Imp, Exp, Cur, Res)
+    years = Dates.value(dates[end] - dates[1])/(3600*1.0e3)/(365.0*24.0)    
+    #scale_values(years, ELoad0, EProd0, Load, Prod, Bat, H2O, Imp, Exp, Cur, Res)
     
-    E_Prod0 = sum(Prod0)   /years/_TWh
-    E_Prod  = sum(Prod.ΔE) /years/_TWh
+    dy  = 1.0 / years
+    dyW = 1.0 / (years*_TWh)
 
-    E_Bati  = sum(Bat.ΔEi) /years/_TWh
-    E_Bato  = sum(Bat.ΔEo) /years/_TWh
+    sumELoad0 = sum(ELoad0) * dyW
+    sumEProd0 = sum(EProd0) * dyW   
 
-    E_H2Oi  = sum(H2O.ΔEi)  /years/_TWh
-    E_H2Oo  = sum(H2O.ΔEo)  /years/_TWh
+    sumLoadΔE  = sum(Load.ΔE) * dyW
+
+    sumProdΔEl = sum(Prod.ΔEl) * dyW
+    sumProdΔEp = sum(Prod.ΔEp) * dyW
+
+    sumBatΔEi  = sum(Bat.ΔEi) * dyW
+    sumBatΔEo  = sum(Bat.ΔEo) * dyW
+
+    sumH2OΔEi  = sum(H2O.ΔEi) * dyW
+    sumH2OΔEo  = sum(H2O.ΔEo) * dyW
     
-    E_Imp   = sum(Imp.ΔE) /years/_TWh
-    E_Exp   = sum(Exp.ΔE) /years/_TWh
-    E_Cur   = sum(Cur.ΔE) /years/_TWh
-    E_Res   = sum(Res.ΔE) /years/_TWh
+    sumImpΔE   = sum(Imp.ΔE) * dyW
+    sumExpΔE   = sum(Exp.ΔE) * dyW
+    sumCurΔE   = sum(Cur.ΔE) * dyW
+    sumResΔE   = sum(Res.ΔE) * dyW
 
-    C_Load  = sum(Load.C) /years
-    C_Prodo = sum(Prod.Co) /years
-    C_Prodi = sum(Prod.Ci) /years
-    C_Bato  = sum(Bat.Co) /years
-    C_H2Oo  = sum(H2O.Co) /years
-    C_Imp   = sum(Imp.C)  /years
+    sumLoadC  = sum(Load.C)  * dy
+    sumProdCl = sum(Prod.Cl) * dy
+    sumProdCp = sum(Prod.Cp) * dy
+    sumBatCo  = sum(Bat.Co)  * dy
+    sumH2OCo  = sum(H2O.Co)  * dy
+    sumImpC   = sum(Imp.C)   * dy
 
-    C_Bati  = sum(Bat.Ci) /years
-    C_H2Oi  = sum(H2O.Ci) /years
-    C_Exp   = sum(Exp.C)  /years
+    sumBatCi  = sum(Bat.Ci) * dy
+    sumH2OCi  = sum(H2O.Ci) * dy
+    sumExpC   = sum(Exp.C)  * dy
 
-    C_Cur   = sum(Cur.C) /years
-    C_Res   = sum(Res.C) /years
+    sumCurC   = sum(Cur.C) * dy
+    sumResC   = sum(Res.C) * dy
 
 
-    SimulationResult(Load0, Prod0, 
-                    Load, Prod, Bat, H2O, Imp, Exp, Cur, Res,
-                    dates, 
-                    E_Load0,
-                    E_Load ,
-                    E_Prod0,
-                    E_Prod ,
-                    E_Bato ,
-                    E_H2Oo  ,
-                    E_Imp ,
-                    E_Res ,
-
-                    E_Bati ,
-                    E_H2Oi  ,
-                    E_Exp ,
-                    E_Cur ,
-
-                    C_Load ,
-                    C_Prodo ,
-                    C_Prodi ,
-                    C_Bato ,
-                    C_H2Oo  ,
-                    C_Imp ,
-                    C_Res  ,
-
-                    C_Bati ,
-                    C_H2Oi  ,
-                    C_Exp ,
-                    C_Cur )
+    SimulationResult(dates, Load, Prod, Bat, H2O, Imp, Exp, Cur, Res,                    
+        ELoad0, 
+        EProd0, 
+        sumELoad0 , 
+        sumEProd0 , 
+        sumLoadΔE , 
+        sumProdΔEl, 
+        sumProdΔEp, 
+        sumBatΔEi , 
+        sumBatΔEo , 
+        sumH2OΔEi , 
+        sumH2OΔEo , 
+        sumImpΔE  , 
+        sumExpΔE  , 
+        sumCurΔE  , 
+        sumResΔE  , 
+        sumLoadC  , 
+        sumProdCl , 
+        sumProdCp , 
+        sumBatCo  , 
+        sumH2OCo  , 
+        sumImpC   , 
+        sumBatCi  , 
+        sumH2OCi  , 
+        sumExpC   , 
+        sumCurC   , 
+        sumResC   )
+                
 end
 
 function print_results(sr)
-    @printf("E_Load0  = %11.4e\n", sr.E_Load0)
-    @printf("E_Load   = %11.4e\n", sr.E_Load )
+    minH2O = minimum(sr.H2O.E)
+    ΔH2O   = abs(sr.H2O.E[1] - sr.H2O.E[end])
+    fval   = get_cent_kWh(sr)
 
-    @printf("E_Prod0  = %11.4e\n", sr.E_Prod0)
-    @printf("E_Prod   = %11.4e\n", sr.E_Prod )
-    @printf("E_Bato   = %11.4e\n", sr.E_Bato )
-    @printf("E_H2Oo   = %11.4e\n", sr.E_H2Oo  )
-    @printf("E_Imp    = %11.4e\n", sr.E_Imp )
-    @printf("E_Res    = %11.4e\n", sr.E_Res )
+    #dt = (t2-t1)*1.0e-9 + (t3-t2)*1.0e-9 + (t4-t3)*1.0e-9
+    @infoe @sprintf("minH2O = %10.4e, ΔH2O = %10.4e, sumRes = %10.4e, sumCurt = %10.4e", minH2O, ΔH2O, sum(sr.Res.ΔE), sum(sr.Cur.ΔE))
 
-    @printf("E_Bati   = %11.4e\n", sr.E_Bati )
-    @printf("E_H2Oi   = %11.4e\n", sr.E_H2Oi  )
-    @printf("E_Exp    = %11.4e\n", sr.E_Exp )
-    @printf("E_Cur    = %11.4e\n", sr.E_Cur )
-    @printf("E_Res    = %11.4e\n", sr.E_Res )
+    @printf("sumELoad0   = %11.4e\n", sr.sumELoad0)
+    @printf("sumLoadΔE   = %11.4e\n", sr.sumLoadΔE)
+
+    @printf("sumProd0    = %11.4e\n", sr.sumEProd0)
+    @printf("sumProdΔEpl = %11.4e\n", sr.sumProdΔEl + sr.sumProdΔEp)
+    @printf("sumProdΔEl  = %11.4e\n", sr.sumProdΔEl)
+    @printf("sumProdΔEp  = %11.4e\n\n", sr.sumProdΔEp)
+
+    ΔEBat = sr.Bat.E[end] - sr.Bat.E[1]
+    ΔEH2O = sr.H2O.E[end] - sr.H2O.E[1]
+
+    @printf("sumBatΔEo   = %11.4e\n", sr.sumBatΔEo )
+    @printf("sumBatΔEi   = %11.4e\n", sr.sumBatΔEi )
+    @printf("ΔEBat       = %11.4e\n\n", ΔEBat )
+
+    @printf("sumH2OΔEo   = %11.4e\n", sr.sumH2OΔEo )
+    @printf("sumH2OΔEi   = %11.4e\n", sr.sumH2OΔEi  )
+    @printf("ΔEH2O       = %11.4e\n\n", ΔEH2O )
+    
+    @printf("sumImpΔE    = %11.4e\n",   sr.sumImpΔE )
+    @printf("sumResΔE    = %11.4e\n\n", sr.sumResΔE )
+
+    @printf("sumExpΔE    = %11.4e\n",   sr.sumExpΔE)
+    @printf("sumCurΔE    = %11.4e\n",   sr.sumCurΔE)
+    @printf("sumResΔE    = %11.4e\n\n", sr.sumResΔE)
 
     @printf("\n")
 
-    @printf("C_Load   = %11.4e\n", sr.C_Load)
+    @printf("sumLoadC    = %11.4e\n", sr.sumLoadC)
 
-    @printf("C_Prodo  = %11.4e\n", sr.C_Prodo)
-    @printf("C_Prodi  = %11.4e\n", sr.C_Prodi)
-    @printf("C_Bato   = %11.4e\n", sr.C_Bato )
-    @printf("C_H2Oo   = %11.4e\n", sr.C_H2Oo)
-    @printf("C_Imp    = %11.4e\n", sr.C_Imp)
-    @printf("C_Res    = %11.4e\n", sr.C_Res)
+    @printf("sumProdCl   = %11.4e\n", sr.sumProdCl)
+    @printf("sumProdCp   = %11.4e\n", sr.sumProdCp)
+    @printf("sumBatCo    = %11.4e\n", sr.sumBatCo )
+    @printf("sumH2OCo    = %11.4e\n", sr.sumH2OCo )
+    @printf("sumImpC     = %11.4e\n", sr.sumImpC  )
+    @printf("sumResC     = %11.4e\n", sr.sumResC  )
 
-    @printf("C_Bati   = %11.4e\n", sr.C_Bati )
-    @printf("C_H2Oi   = %11.4e\n", sr.C_H2Oi)
-    @printf("C_Exp    = %11.4e\n", sr.C_Exp)
-    @printf("C_Cur    = %11.4e\n", sr.C_Cur)
+    @printf("sumBatCi    = %11.4e\n", sr.sumBatCi)
+    @printf("sumH2OCi    = %11.4e\n", sr.sumH2OCi)
+    @printf("sumExpC     = %11.4e\n", sr.sumExpC )
+    @printf("sumCurC     = %11.4e\n", sr.sumCurC )
 
     @printf("\n")
     ϵ = 1.0e-12
-    @printf("c_load   = %11.4e\n", sr.C_Load / (sr.E_Load0+ϵ) * 1.0e-9)
-    @printf("c_prod   = %11.4e\n", sr.C_Prodo/ (sr.E_Prod +ϵ) * 1.0e-9)
-    @printf("c_bato   = %11.4e\n", sr.C_Bato / (sr.E_Bato +ϵ) * 1.0e-9)
-    @printf("c_H2o    = %11.4e\n", sr.C_H2Oo / (sr.E_H2Oo +ϵ) * 1.0e-9)
-    @printf("c_impp   = %11.4e\n", sr.C_Imp  / (sr.E_Imp  +ϵ) * 1.0e-9)
-    @printf("\n")
-    @printf("c_bati   = %11.4e\n", sr.C_Bati / (sr.E_Bati +ϵ) * 1.0e-9)
-    @printf("c_H2i    = %11.4e\n", sr.C_H2Oi / (sr.E_H2Oi +ϵ) * 1.0e-9)
-    @printf("c_expp   = %11.4e\n", sr.C_Exp  / (sr.E_Exp  +ϵ) * 1.0e-9)
-    @printf("c_curt   = %11.4e\n", sr.C_Cur  / (sr.E_Cur  +ϵ) * 1.0e-9)
-    @printf("c_res    = %11.4e\n", sr.C_Res  / (sr.E_Res  +ϵ) * 1.0e-9)
-    @printf("\n")
+    #@printf("c_load   = %11.4e\n", sr.C_Load / (sr.E_Load0+ϵ) * 1.0e-9)
+    #@printf("c_prodl  = %11.4e\n", sr.C_Prodl/ (sr.E_Prodl+ϵ) * 1.0e-9)
+    #@printf("c_prodp  = %11.4e\n", sr.C_Prodp/ (sr.E_Prodp+ϵ) * 1.0e-9)
+    #@printf("c_bato   = %11.4e\n", sr.C_Bato / (sr.E_Bato +ϵ) * 1.0e-9)
+    #@printf("c_H2o    = %11.4e\n", sr.C_H2Oo / (sr.E_H2Oo +ϵ) * 1.0e-9)
+    #@printf("c_impp   = %11.4e\n", sr.C_Imp  / (sr.E_Imp  +ϵ) * 1.0e-9)
+    #@printf("\n")
+    #@printf("c_bati   = %11.4e\n", sr.C_Bati / (sr.E_Bati +ϵ) * 1.0e-9)
+    #@printf("c_H2i    = %11.4e\n", sr.C_H2Oi / (sr.E_H2Oi +ϵ) * 1.0e-9)
+    #@printf("c_expp   = %11.4e\n", sr.C_Exp  / (sr.E_Exp  +ϵ) * 1.0e-9)
+    #@printf("c_curt   = %11.4e\n", sr.C_Cur  / (sr.E_Cur  +ϵ) * 1.0e-9)
+    #@printf("c_res    = %11.4e\n", sr.C_Res  / (sr.E_Res  +ϵ) * 1.0e-9)
+    #@printf("\n")
 
     # Load 
-    Esources = sr.E_Prod + sr.E_Bato + sr.E_H2Oo + sr.E_Imp + sr.E_Res
+    Eload = sr.sumProdΔEl + sr.sumBatΔEo + sr.sumH2OΔEo + sr.sumImpΔE + sr.sumResΔE
 
-    Esinks = sr.E_Bati + sr.E_H2Oi + sr.E_Exp  + sr.E_Cur 
-    Esourcebalance = Esources - sr.E_Load
+    Esinks = sr.sumBatΔEi + sr.sumH2OΔEi + sr.sumExpΔE  + sr.sumCurΔE
+    
+    ΔEload = Eload - sr.sumLoadΔE
 
-    Esinkbalance = Esinks + sr.E_Prod - sr.E_Prod0
-
-    @printf("Energy source balance  = %11.4e\n", Esourcebalance)
-    @printf("Energy sink   balance  = %11.4e\n", Esinkbalance)
+    ΔEsink = Esinks + sr.sumProdΔEl - sr.sumEProd0
 
     # Load cost
-    Csources = sr.C_Prodo + sr.C_Bato + sr.C_H2Oo + sr.C_Imp + sr.C_Res 
+    Cload = sr.sumProdCl + sr.sumBatCo + sr.sumH2OCo + sr.sumImpC + sr.sumResC 
     # Production profit
-    Csinks   = sr.C_Prodi + sr.C_Bati + sr.C_H2Oi + sr.C_Exp + sr.C_Cur
+    Csink = sr.sumBatCi + sr.sumH2OCi + sr.sumExpC + sr.sumCurC
 
-    Cbalance = Csources - sr.C_Load
-    @printf("Load cost balance  = %11.4e\n", Cbalance)
-    @printf("Sink cost balance  = %11.4e\n", Csinks)
+    ΔCload = Cload - sr.sumLoadC
+    ΔCsink = Csink - sr.sumProdCp
 
+    @printf("ΔEload      = %11.4e\n", ΔEload)
+    @printf("ΔEsink      = %11.4e\n", ΔEsink)
+    @printf("ΔCload      = %11.4e\n", ΔCload)
+    @printf("ΔCsink      = %11.4e\n", ΔCsink)
 end
 
 @inline function get_cent_kWh(sr)
-    (sr.C_Load)/sr.E_Load0 * 1.0e-9
+    C1 = (sr.sumLoadC)/sr.sumELoad0 * 1.0e-9
+    C2 = (sr.sumCurC)/sr.sumELoad0 * 1.0e-9
+    C1 + C2
 end
 
 function plot_all(sr::SimulationResult)
     plt.figure()
-    plt.plot(sr.dates,  sr.Prod0, label="Prod")
-    plt.plot(sr.dates, -sr.Load0, label="Load")
+    plt.plot(sr.dates,  sr.EProd0, label="Prod")
+    plt.plot(sr.dates, -sr.ELoad0, label="Load")
     plt.legend()
 
     plt.figure()
@@ -234,7 +289,10 @@ function plot_all(sr::SimulationResult)
     plt.figure()
     plt.plot(sr.dates,  sr.Imp.ΔE, label="E_Imp")
     plt.plot(sr.dates, -sr.Exp.ΔE, label="E_Exp")
-    plt.legend()
+    plt.legend()x = [1.0e3, 2.5e4, 1.3]
+    sr = compute(x, power_data, nhours, p);
+    abs(get_cent_kWh(sr))
+    
 
     plt.figure()
     plt.plot(sr.dates, -sr.Cur.ΔE, label="E_Cur")
@@ -242,8 +300,9 @@ function plot_all(sr::SimulationResult)
     plt.legend()
 
     plt.figure()
-    plt.plot(sr.dates,  sr.Prod.C, label="C_Prod")
-    plt.plot(sr.dates, -sr.Load.C, label="C_Load")
+    plt.plot(sr.dates,  sr.Prod.Cl, label="C_Prodl")
+    plt.plot(sr.dates,  sr.Prod.Cp, label="C_Prodp")
+    plt.plot(sr.dates, -sr.Load.C,  label="C_Load")
     plt.legend()
 
     plt.figure()
@@ -297,8 +356,8 @@ Base.@kwdef mutable struct EnergyParameter{T}
     Exp_CMWh     :: T = T(5.0)
     Exp_Pout     :: T = T(10.0)
 
-    Cur_CMWh     :: T = T(500.0)
-    Res_CMWh     :: T = T(300000.0)
+    Cur_CMWh     :: T = T(200.0)
+    Res_CMWh     :: T = T(500.0)
 
     fcall        :: Int64 = 0
     gcall        :: Int64 = 0
@@ -338,14 +397,14 @@ function compute(x, power_data, nhours, p::EnergyParameter{T}) where T
     if p.H2O_Einit < 0.0
         p.H2O_Einit = hcap*0.5
     end
-
+    
     load = Load(copy(power_data.Load));
 
     years = Dates.value(power_data.dates[end] - power_data.dates[1])/(3600*1.0e3)/(365.0*24.0)
 
     #price_of_MWh = (one(T) + (op-one(T)) * p.prod_cost_factor) * p.prod_CostGWh
-    prod0 = power_data.WWSBPower .* op
-    prod  = Production(copy(prod0), p.Pro_CMWh);
+    Eprod0 = power_data.WWSBPower .* op
+    prod  = Production(copy(Eprod0), p.Pro_CMWh);
 
     #ΔP = @. prod0 - load.Et# + (p.H2O_Pout + p.Exp_Pout)
     #ΔPmin = minimum(ΔP)
@@ -364,115 +423,10 @@ function compute(x, power_data, nhours, p::EnergyParameter{T}) where T
     t2 = time_ns()
     run_system(load, prod, bat, H2, impp, expp, curt, res, Δt)
     t3 = time_ns()
-    sr = SimulationResult(power_data.dates, power_data.Load, prod0, load, prod, bat, H2, impp, expp, curt, res)
+    sr = SimulationResult(power_data.dates, power_data.Load, Eprod0, load, prod, bat, H2, impp, expp, curt, res)
     t4 = time_ns()
     
-    minhso = minimum(sr.H2O.E) - 10.0
-    h2d    = abs(sr.H2O.E[1] - sr.H2O.E[end]) - 10.0
-    fval   = get_cent_kWh(sr)
-
-    #dt = (t2-t1)*1.0e-9 + (t3-t2)*1.0e-9 + (t4-t3)*1.0e-9
-    @infoe @sprintf("[%8.2f, %8.2f, %8.2f] %8.4f,  %10.4f,  %10.4f, %10.4f", x[1], x[2], x[3], fval, sum(sr.Res.ΔE), minhso, h2d)
-
     sr
-end
-
-function comp(x, power_data, nhours, p)
-    sr = compute(x, power_data, nhours, p);
-
-    minEH2O = minimum(sr.H2O.E)
-    maxRes = maximum(sr.Res.ΔE)
-    print_results(sr)
-    
-    @printf("\n")
-    @printf("C kWh   = %6.4f\n", get_cent_kWh(sr))
-    @printf("minEH2O = %8.2e\n", minEH2O)
-    @printf("ΔH2O    = %8.2e\n", sr.H2O.E[1] - sr.H2O.E[end])
-    @printf("maxRes  = %8.2e\n", maxRes)
-    @printf("\n")
-
-    sr
-end
-
-import FiniteDifferences
-function make_funcs(power_data, nhours, p)print_results(sr)
-
-
-    fdm = FiniteDifferences.central_fdm(3, 1)
-    
-    function fn(x, p)
-        sr = compute(x, power_data, nhours, p)
-        r = abs(get_cent_kWh(sr))
-        @infoe x, r
-        r
-    end
-
-    function fnd(x)
-        sr = compute(x, power_data, nhours, p)
-        r = abs(get_cent_kWh(sr))
-        @infoe x, r
-        r
-    end
-
-    function fngrad(G, x, p)
-        δ = x .* 1.0e-6
-
-        f0 = fn(x, p)
-        x[1] = x[1] + δ[1]
-        f1 = fn(x, p)
-        x[1] = x[1] - δ[1]print_results(sr)
-
-        x[2] = x[2] + δ[2]
-        f2 = fn(x, p)
-        x[2] = x[2] - δ[2]
-        x[3] = x[3] + δ[3]
-        f3 = fn(x, p)
-        x[3] = x[3] - δ[3]
-
-        G[1] = (f1-f0)/δ[1]
-        G[2] = (f2-f0)/δ[2]
-        G[3] = (f3-f0)/δ[3]
-
-        @infoe x, G
-        #G .= FiniteDifferences.grad(fdm, fnd, x)
-        #@infoe x, G
-    end
-
-    function fncons(x, p)
-        sr = compute(x, power_data, nhours, p)
-        res[1] = abs(sr.H2O.E[1] - sr.H2O.E[end])
-        #res[2] = minimum(sr.H2O.E)
-    end
-        
-    fn, fngrad, fncons
-end
-
-function find_optimum(lb, ub, u0, power_data, nhours, p)
-
-    opt = NLopt.Opt(:GN_AGS, 3)
-    #opt = NLopt.Opt(:LN_BOBYQA, 4)
-
-    NLopt.lower_bounds!(opt, lb)
-    NLopt.upper_bounds!(opt, ub)
-
-    objective_fn, constraint_fn1, constraint_fn2, constraint_fn3 = make_funcs(power_data, nhours, p)
-    #NLopt.inequality_constraint!(opt, constraint_fn1, 1e-8)
-    #NLopt.inequality_constraint!(opt, constraint_fn3, 1e-8)
-
-    NLopt.xtol_rel!(opt, 1e-4)
-    NLopt.min_objective!(opt, objective_fn)
-
-    min_f, min_x, ret = NLopt.optimize(opt, u0)
-    num_evals = NLopt.numevals(opt)
-
-    sr = comp(min_x, power_data, nhours, p)
-
-    @printf("objective value : %6.4f\n", min_f)
-    @printf("solution        : %s   \n", min_x)
-    @printf("solution status : %s   \n", ret)
-    @printf("nb_func         : %d   \n", num_evals)
-
-    min_x, min_f, sr
 end
 
 T = Float64
@@ -480,80 +434,30 @@ power_data = load_detrended_power_data("save_detrended_power_data.hdf5");
 nhours = length(power_data.dates)
 p = EnergyParameter{Float64}();
 
-
-x = [2.0e3, 1.6e4, 1.4]
+x = [1.0e3, 1.5e4, 1.3]
 sr = compute(x, power_data, nhours, p);
 abs(get_cent_kWh(sr))
 
 print_results(sr)
 
+plot_all(sr)
 
-min_x, min_f, sr = find_optimum(lb, ub, u0, power_data, nhours, p);
+plt.plot(cumsum(sr.Load.C) - cumsum(sr.Prod.Cl + sr.Bat.Co + sr.H2O.Co + sr.Imp.C + sr.Res.C))
+plt.plot(sr.Load.C - (sr.Prod.Cp + sr.Bat.Co + sr.H2O.Co + sr.Imp.C + sr.Res.C))
 
-x = min_x .+ [0.0, 0.0, 0.2, 0.0]
-sr = compute(x, power_data, nhours, p)
+a = @. ( sr.Load.C - (sr.Prod.Cl + sr.Bat.Co + sr.H2O.Co + sr.Imp.C + sr.Res.C))
+i = argmax(a)
+sr.Load.C[i]
+sr.Prod.Cl[i]
+sr.Prod.ΔEp[i]
+sr.Bat.Co[i]
+sr.H2O.Co[i]
+sr.Imp.C[i]
+sr.Res.C[i]
+sum(sr.Cur.C)
+sum(a)
+plt.plot(a)
+cumsum(sr.Load.C)
 
-#plot_all(sr)
-
-
-#using Optim
-#inner_optimizer = NelderMead()
-#sol1 = optimize(func, lb, ub, u0, Fminbox(inner_optimizer)) #f_reltol = 0.01))#, x_abstol=1.0e-5, iterations=200))
-#u1 = Optim.minimizer(sol1)
-
-using Optimization
-using OptimizationNLopt
-
-lb = [1.0e3]
-ub = [4.0e4]
-λ  = 0.5
-u0 = [((1.0-λ)*lb[i] + λ*ub[i]) for i in 1:1]
-
-function fn(u, p)
-    x = [1.0e3, u[1], 1.5]
-    sr = compute(x, power_data, nhours, p)
-    r = abs(get_cent_kWh(sr))
-    m = minimum(sr.H2O.E)
-    @infoe x, r, m
-    m
-end
-
-function fngrad(G, u, p)
-    δ = u[1] * 1.0e-3
-    
-    f0 = fn(u, p)
-    u[1] = u[1] + δ
-    f1 = fn(u, p)
-    u[1] = u[1] - δ
-
-    G[1] = (f1-f0)/δ
-    #G .= FiniteDifferences.grad(fdm, fnd, x)
-    @infoe u, G
-end
-
-#fn, fngrad, fncons = make_funcs(power_data, nhours, p);
-optf = OptimizationFunction(fn, grad=fngrad);#, cons=fncons);
-prob = OptimizationProblem(optf, u0, p, lb = lb, ub = ub)
-sol = solve(prob, Opt(:LD_LBFGS, 1))
-G = zeros(3)
-fngrad(G, u0, p)
-
-
-plot_results(sr)
-
-x = [1.0e3, 2.0e4, 1.25]
-sr = compute(x, power_data, nhours, p)
-r = abs(get_cent_kWh(sr))
-G=zeros(1)
-fngrad(G, [1.25], p)
-u=zeros(1)
-u[1] = 1.25
-
-
-C_Load   =  3.4181e+10
-C_Prod   =  2.9280e+10
-C_Bato   =  3.4667e+09
-C_H2Oo   =  1.1011e+09
-C_Imp    =  1.2864e+09
-
-C_Prod + 
+sum(sr.H2O.ΔEo)/10.0/1.0e3
+plt.plot(sr.H2O.ΔEo)
