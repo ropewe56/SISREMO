@@ -9,20 +9,16 @@ using DataFrames
 using CSV
 using StringEncodings
 using OrderedCollections
-
 using SimpleLog
 
-function get_json_list(root, prefix)
-    jsonfiles = []
-    for (rr,dd,ff) in walkdir(root)
-        csv = filter(x -> lowercase(splitext(x)[2]) == ".json" && occursin(prefix, x), ff)
-        for c in csv
-            push!(jsonfiles, joinpath(rr, c))
-        end
+function get_jsonlists(jsonroot, categories)
+    jlist = readdir(jsonroot)
+    jfilelist = OrderedDict()
+    for cat in categories
+        jfilelist[cat] = sort(filter(x -> lowercase(splitext(x)[2]) == ".json" && occursin(cat, x), jlist))
     end
-    jsonfiles
+    jfilelist
 end
-
 
 """
     create_umsaetze_table(db, table_name)
@@ -78,6 +74,7 @@ end
 
 function get_union_of_col_names(jlist)
     cols = Set()
+    key1, key2 = "", ""
     for jfile in jlist
         key1, key2, colnames =  get_colnames(jfile)
         syms = normalize_colname.(colnames)
@@ -87,7 +84,7 @@ function get_union_of_col_names(jlist)
     end
     cols = sort(collect(cols))
     cold = OrderedDict{Symbol, Int}()
-    cold[:unix_seconds] = 1
+    cold[Symbol(key1)] = 1
     j = 2
     for c in cols
         if !haskey(cold, c)
@@ -105,13 +102,22 @@ function load_data(jfile, colsyms0)
 
     nr = length(jdat[key1])
     nc = length(colsyms0)
-    vdat = Vector{Vector{Float64}}(undef,nc)
-    for i in 1:nc
+
+    vdat = Vector{Any}(undef,nc)
+    vdat[1] = Vector{Int64}
+    for i in 2:nc
         vdat[i] = zeros(Float64, nr)
     end
 
     j = colsyms0[Symbol(key1)]
-    vdat[j] = jdat[key1]
+    if j != 1
+        @warne j
+    end
+    if key1 == "time"
+        vdat[1] = parse.(Int64, jdat[key1])
+    else
+        vdat[1] = jdat[key1]
+    end
 
     dats = jdat[key2];
     for (i,d) in enumerate(dats)
@@ -135,8 +141,9 @@ end
 function load_files(jsonfiles, colsyms0)
     colsyms = collect(keys(colsyms0))
     coltypes = [Float64 for i in eachindex(colsyms)]
-    named_tuple = (; zip(colsyms, type[] for type in coltypes )...)
+    coltypes[1] = Int64
 
+    named_tuple = (; zip(colsyms, type[] for type in coltypes )...)
     df0 = DataFrame(named_tuple)
     for jsonfile in jsonfiles
         df = load_data(jsonfile, colsyms0)
@@ -145,12 +152,51 @@ function load_files(jsonfiles, colsyms0)
     df0
 end
 
+function create_sqlite_db!(db, jsonfiles, categories)
+    cat = "cbpf"
+    for cat in categories
+        colsyms0 = get_union_of_col_names(jsonfiles[cat])
+        tt = if haskey(colsyms0, :unix_seconds)
+            "unix_seconds"
+        elseif haskey(colsyms0, :time)
+            "time"
+        else
+            @warne colsyms0
+        end
+        @infoe cat, tt
+        df0 = load_files(jsonfiles[cat], colsyms0)
+        colnames = names(df0)
 
-colsyms0 = get_union_of_col_names(jsonfiles["public_power"])
-df0 = load_files(jsonfiles["public_power"], colsyms0)
-db = SQLite.DB("public_power.db")
-SQLite.load!(df0, db, "public_power")
-SQLite.removeduplicates!(db, "public_power", ["unix_seconds"])
-SQLite.execute(db, "DELETE FROM public_power WHERE Load == 0.0;")
+        tt = if "unix_seconds" in colnames
+            "unix_seconds"
+        elseif "time" in colnames
+            "time"
+        end
+        if tt === nothing
+            @infoe colnames
+        end
+        @infoe tt
+        @infoe names(df0)
+        @infoe SQLite.columns(db, "public_power")
+        
+        SQLite.load!(df0, db, cat)
+        SQLite.removeduplicates!(db, cat, [tt])
+        if :Load in colnames
+            SQLite.execute(db, "DELETE FROM $cat WHERE Load < 1.0;")
+        end
+    end
+end
 
+dataroot = joinpath(dirname(dirname(@__DIR__)), "data")
+jsonroot = joinpath(dataroot, "json_downloads")
+#jsonroot = dataroot
 
+categories = ["cbpf", "public_power", "total_power", "installed_power"]
+jsonfiles = get_jsonlists(jsonroot, categories)
+db = SQLite.DB(joinpath(dataroot, "ise_data.db"))
+create_sqlite_db!(db, jsonfiles, categories)
+
+close(db)
+#rm(joinpath(dataroot, "ise_data.db"))
+
+SQLite.columns(db, "public_power")

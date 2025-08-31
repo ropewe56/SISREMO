@@ -1,12 +1,14 @@
 using DataStructures
 using OrderedCollections
 using DataFrames
-using HTTP
 import Dates
 using Printf
 using JSON3
+using SimpleLog
 
-using BaseUtils
+function uts_to_dates(uts)
+    Dates.unix2datetime(uts)
+end
 
 function replace_missing(V::Vector{T}, a::T) where T
     @. ifelse(V == missing, a, V)
@@ -24,93 +26,12 @@ function extract_start_end_date(hdf5_dir, year)
     @info get_nb_days(date_time[1], date_time[end])
 end
 
-function dates_to_uts(date)
-    floor(Int64, Dates.datetime2unix(date))
-end
-
-function uts_to_dates(uts)
-    Dates.unix2datetime(uts)
-end
-
 function name_years(name,  start_year, end_year; ext = nothing)
     if ext === nothing
         return @sprintf("%s_%d-%d", name, start_year, end_year)
     end
     @sprintf("%s_%d-%d.%s", name, start_year, end_year, ext)
 end
-
-###> start download
-"""
-    download_ise_power_data(hdf5_dir, year)
-
-    hdf5_dir : directory where to store downloaded json file
-    year : power data as json is downloaded for year and saved to power_<year>.json
-
-    /public_power Public Power
-    /cbpf Cross Border Physical Flows
-"""
-function download_ise_power_data(json_dir, year_, get_)
-    query = [("country" => "de"), ("start", @sprintf("%s-01-01T00:00Z",year_)), ("end", @sprintf("%s-12-31T23:59Z", year_))]
-    url   = "https://api.energy-charts.info/"*get_
-    
-    @infoe @sprintf("Download %s: %d", get_, year_)
-    resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
-
-    b     = String(resp.body)
-    bb    = JSON3.read(b)
-    path  = joinpath(json_dir,@sprintf("%s_%s.json", get_, year_))
-    open(path, "w") do out
-        JSON3.pretty(out, bb)
-    end
-    @infoe @sprintf("saved to %s", path)
-end
-
-function load_ise_energy_chart_data(json_dir, start_year, end_year, get)
-    for year in start_year:end_year
-        download_ise_power_data(json_dir, year, get)
-    end
-end
-
-"""
-    download_ise_istalled_power_data()
-
-    downlaod the intsalled data and save in file installed_power.json
-"""
-function download_ise_istalled_power_data(json_dir)
-    query = Dict("country" => "de", "time_step" => "monthly", "installation_decomission" => false)
-    url   = "https://api.energy-charts.info/installed_power"
-    resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
-    b = String(resp.body)
-    bb = JSON3.read(b)
-    
-    function make_datetime(x)
-        my = split(x, ".")
-        Dates.DateTime(parse(Int64, my[2]), parse(Int64, my[1]))
-    end
-
-    uts = [dates_to_uts(make_datetime(x)) for x in bb["time"]]
-
-    bbb = Dict("unix_seconds" => uts, "production_types" => bb["production_types"])
-    for (n,d) in bbb["production_types"]
-        @infoe n
-    end
-
-    open(joinpath(json_dir, "installed_power.json"), "w") do out
-        JSON3.pretty(out, bbb)
-    end
-end
-
-"""
-    Download ise data and store as json in json_dir
-"""
-function download_ise_data(json_dir, start_year, end_year)
-    # cbpf Cross Border Physical Flows
-    gets = ["public_power", "total_power", "installed_power", "cbpf"]
-    for get in gets
-        load_ise_energy_chart_data(json_dir, start_year, end_year, get)
-    end
-end
-###< end download
 
 ###> 
 """
