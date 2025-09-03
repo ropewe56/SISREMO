@@ -207,7 +207,7 @@ end
 
 function get_data(jahr_von, jahr_bis)
     dataroot = joinpath(dirname(dirname(@__DIR__)), "data")
-    dbname = joinpath(dataroot, "ise_data2.db")
+    dbname = joinpath(dataroot, "ise_data.db")
     db = SQLite.DB(dbname)
 
     d1 = DateTime(jahr_von, 1, 1, 0, 0, 0)
