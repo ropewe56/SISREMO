@@ -69,6 +69,7 @@ function normalize_colname(colname)
     colname = replace(colname, "/" => "")
     colname = replace(colname, "__" => "_")
     colname = replace(colname, "-" => "_")
+    colname = replace(colname, "_(incl._self_consumption)" => "")
     Symbol(colname)
 end
 
@@ -78,8 +79,10 @@ function get_union_of_col_names(jlist)
     for jfile in jlist
         key1, key2, colnames =  get_colnames(jfile)
         syms = normalize_colname.(colnames)
-        for n in syms
-            push!(cols, n)
+        for n in colnames
+            sym = normalize_colname(n)
+            push!(cols, sym)
+            #println(n, " ", sym)
         end
     end
     cols = sort(collect(cols))
@@ -187,16 +190,51 @@ function create_sqlite_db!(db, jsonfiles, categories)
     end
 end
 
-dataroot = joinpath(dirname(dirname(@__DIR__)), "data")
-jsonroot = joinpath(dataroot, "json_downloads")
-#jsonroot = dataroot
+function create_db()    
+    dataroot = joinpath(dirname(dirname(@__DIR__)), "data")
+    jsonroot = joinpath(dataroot, "json_downloads")
+    #jsonroot = dataroot
 
-categories = ["cbpf", "public_power", "total_power", "installed_power"]
-jsonfiles = get_jsonlists(jsonroot, categories)
-db = SQLite.DB(joinpath(dataroot, "ise_data.db"))
-create_sqlite_db!(db, jsonfiles, categories)
+    categories = ["cbpf", "public_power", "total_power", "installed_power"]
+    jsonfiles = get_jsonlists(jsonroot, categories)
+    dbname = joinpath(dataroot, "ise_data2.db")
+    #rm(dbname)
+    db = SQLite.DB(dbname)
+    create_sqlite_db!(db, jsonfiles, categories)
 
-close(db)
-#rm(joinpath(dataroot, "ise_data.db"))
+    close(db)
+end
 
-SQLite.columns(db, "public_power")
+function get_data(jahr_von, jahr_bis)
+    dataroot = joinpath(dirname(dirname(@__DIR__)), "data")
+    dbname = joinpath(dataroot, "ise_data2.db")
+    db = SQLite.DB(dbname)
+
+    d1 = DateTime(jahr_von, 1, 1, 0, 0, 0)
+    d2 = DateTime(jahr_bis, 12, 31, 23, 59, 59)
+    uts1 = datetime2unix.(d1)
+    uts2 = datetime2unix.(d2)
+            
+    cols = ["Load",
+        "Biomass",
+        "Solar",
+        "Wind_offshore",
+        "Wind_onshore",
+        "Geothermal",
+        "Hydro_Run_of_River",
+        "Hydro_pumped_storage",
+        "Hydro_pumped_storage_consumption",
+        "Hydro_water_reservoir"]
+
+    c = join(cols, ", ")
+
+    total_power = DBInterface.execute(db, "SELECT $c FROM total_power WHERE unix_seconds >= $uts1 AND unix_seconds < $uts2;")
+    installed_power = DBInterface.execute(db, "SELECT * FROM installed_power WHERE time >= $jahr_von AND time <= $jahr_bis;")
+
+    DataFrame(total_power), DataFrame(installed_power)
+end
+
+#jahr_von = 2017
+#jahr_bis = 2018
+#total_power, installed_power = get_data(jahr_von, jahr_bis)
+
