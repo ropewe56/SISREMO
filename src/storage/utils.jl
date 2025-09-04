@@ -8,7 +8,7 @@ using Dates
 """
 function polynomial_fit(y, k)
     N = length(y)
-    x = mgrid(0.0, Float64(N), N)
+    x = collect(range(0.0, Float64(N), N))
     p = poly_fit(x, y, k)
     yf = p[1]
     for i in 1:k

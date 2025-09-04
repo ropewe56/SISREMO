@@ -1,4 +1,4 @@
-import BaseUtils
+import SimpleLog
 
 import PyPlot as pl
 pl.pygui(true)

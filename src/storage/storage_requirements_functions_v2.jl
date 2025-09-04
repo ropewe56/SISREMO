@@ -1,4 +1,4 @@
-using BaseUtils
+using SimpleLog
 using Statistics
 using Interpolations
 using Printf
@@ -7,8 +7,11 @@ import PyPlot as pl
 pl.pygui(true)
 pl.pygui(:qt5)
 
-include("storage/utils.jl")
-include("storage/energy_data.jl")
+include("utils.jl")
+include("../energy_data_sql/sqlite_functions.jl")
+include("../energy_data_sql/energy_data.jl")
+include("../energy_data/averadged_data.jl")
+include("../energy_data/detrended_data.jl")
 
 include("plot_results_v2.jl")
 
@@ -78,7 +81,7 @@ function scale_power(Load, Woff, Won, Solar, Bio)
     Woff_sc, Won_sc, Solar_sc, WWSB_sc, scale
 end
 
-function renewables_detrend_and_scale(hdf5_dir, power_data, par)
+function renewables_detrend_and_scale(par, power_data)
     local Woff_de 
     local Won_de  
     local Solar_de
@@ -91,7 +94,7 @@ function renewables_detrend_and_scale(hdf5_dir, power_data, par)
     local Load_trend 
     
     if par.scale_with_installed_power_p
-        IP = InstalledPowerData(hdf5_dir, power_data, par)
+        IP = InstalledPowerData(par, power_data)
 
         IP_Woff  = @. IP.Woff  / mean(IP.Woff)
         IP_Won   = @. IP.Won   / mean(IP.Won)
@@ -134,21 +137,6 @@ function renewables_detrend_and_scale(hdf5_dir, power_data, par)
                     Load_de, Woff_sc, Won_sc, Solar_sc, Bio_de, WWSB_de, 
                     Load_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend, WWSB_trend)
     powers_de
-end
-
-function detrend_renewables(power_data)
-    Woff , Woff_trend  = detrend_time_series(power_data.Woff )
-    Won  , Won_trend   = detrend_time_series(power_data.Won  )
-    Solar, Solar_trend = detrend_time_series(power_data.Solar)
-    Bio  , Bio_trend   = detrend_time_series(power_data.Bio  )
-
-    P_de, P_trend = detrend_time_series(Woff .+ Won .+ Solar .+ Bio)
-    L_de, L_trend = detrend_time_series(power_data.Load)
-    
-    detrended_powers = DetrendedPowerData(power_data.dates, power_data.uts,
-        L_de, P_de, Woff, Won, Solar, Bio, L_trend, P_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend)
-    
-    detrended_powers
 end
 
 mutable struct Storage
@@ -244,11 +232,11 @@ end
     over_production  : renewable over production capacity factor, 1.0 is no over production capacity
     storage_capacity : storage capacity
 """
-function compute_storage_level(load, scaled_renewables, st_capacities, op::Float64, SF1_factor; log_p=false)
+function compute_storage_level(load, scaled_renewables, storage_capacities, op::Float64, SF1_factor; log_p=false)
 
     storages = Vector{Storage}(undef, 0)
     nb_steps  = size(scaled_renewables, 1)
-    for stc in st_capacities
+    for stc in storage_capacities
         storage = Storage(stc, nb_steps)
         storage.SF[1] = stc*SF1_factor
         push!(storages, storage)
@@ -325,16 +313,16 @@ end
 """
     compute storage fill level for different combinations of storage_capacity and over_production
 """
-function compute_storage_fill_level(powers, st_capacities::Vector{Vector{Float64}}, oprod::Vector{Float64}, SF1_factor)
+function compute_storage_fill_level(powers, storage_capacities::Vector{Float64}, over_production::Vector{Float64}, SF1_factor)
     @infoe @sprintf("==== compute_storage_fill_level ===================================================================")
 
     storages_v = []
     scaled_renewables_v = Vector{Vector{Float64}}(undef,0)
-    for (i, op) in enumerate(oprod)
+    for (i, op) in enumerate(over_production)
         @infoe @sprintf("==== %d", i)
-        @infoe @sprintf("storage_capacities = %s, over_production = %f", st_capacities[i], op)
+        @infoe @sprintf("storage_capacities = %s, over_production = %f", storage_capacities[i], op)
         scaled_renewables = get_scaled_renewables(powers, op)
-        storages, scaled_renewables = compute_storage_level(powers.Load, scaled_renewables, st_capacities[i], op, SF1_factor)
+        storages, scaled_renewables = compute_storage_level(powers.Load, scaled_renewables, storage_capacities[i], op, SF1_factor)
         push!(storages_v, storages)
         push!(scaled_renewables_v, scaled_renewables)
     end
@@ -360,7 +348,7 @@ function determine_overproduction(dates::Vector{DateTime}, Load::Vector{Float64}
         it = 0
         while minS < 0.0 && it < 50
 
-            storages, WWSB_sc = compute_storage_level(Load, WWSB_sc, st_capacities, op::Float64, SF1_factor; log_p=false)
+            storages, WWSB_sc = compute_storage_level(Load, WWSB_sc, storage_capacities, op::Float64, SF1_factor; log_p=false)
 
             min_storage_level1 = minimum(storages[1].SF)
             min_storage_level2 = minimum(storages[2].SF)
@@ -376,11 +364,15 @@ end
 
 """
     load data and compute and plot storage fille levels, original times (15 min)
-"""
-function compute_and_plot(power_data, power_data_de, st_capacities, oprod, par)
+    compute_and_plot(par, power_data, power_data_de, storage_capacities, over_production)
 
-    storages_v, WWSB_scaled = compute_storage_fill_level(power_data_de, st_capacities, oprod, par.SF1_factor)
+"""
+function compute_and_plot(par, power_data, power_data_de, storage_capacities, over_production)
+
+    storages_v, WWSB_scaled = compute_storage_fill_level(power_data_de, storage_capacities, over_production, par.SF1_factor)
     
+    dates = power_data.dates
+
     nb_stg = length(storages_v[1])
     @infoe "nb_stg =", nb_stg
     stores = []
@@ -408,12 +400,12 @@ function compute_and_plot(power_data, power_data_de, st_capacities, oprod, par)
         plot_detrended(dates, power_data.WWSBPower, WWSB_de, power_data_de.WWSB_trend, ΔEL, 
             Load, Load_de, power_data_de.Load_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
         
-        plot_cumulative_power(dates, WWSB_de, Load_de, oprod, par.punit, par.fig_dir, fig)
+        plot_cumulative_power(dates, WWSB_de, Load_de, over_production, par.punit, par.fig_dir, fig)
 
         for j in 1:nb_stg
             @infoe j, fig
             plot_storage_fill_level(dates, Load_de, WWSB_de, WWSB_scaled, stores[j], 
-                oprod, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
+                over_production, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
         end
     end
 end
@@ -421,18 +413,18 @@ end
 """
     load data and compute and plot storage fill levels, data are smoothed using moving averages
 """
-function compute_and_plot_averaged(st_capacities::Vector{Vector{Float64}}, oprod::Vector{Float64}, par)
+function compute_and_plot_averaged(storage_capacities::Vector{Float64}, over_production::Vector{Float64}, par)
 
     power_data = PowerData(par);
     power_data_av = get_averaged_power_data(power_data, par.averaging_hours, par.averaging_method)
 
     power_data_avde = if par.scale_to_installed_power_p
-        renewables_detrend_and_scale(power_data_av, par);
+        renewables_detrend_and_scale(par, power_data_av);
     else
         detrend_renewables(power_data_av);
     end
 
-    storages_v, WWSB_scaled = compute_storage_fill_level(power_data_avde, st_capacities, oprod, par.SF1_factor)
+    storages_v, WWSB_scaled = compute_storage_fill_level(power_data_avde, storage_capacities, over_production, par.SF1_factor)
     nb_stg = length(storages_v[1])
 
     nb_stg = length(storages_v[1])
@@ -464,11 +456,11 @@ function compute_and_plot_averaged(st_capacities::Vector{Vector{Float64}}, oprod
         plot_detrended(dates, WWSB, WWSB_de, power_data_avde.WWSB_trend, ΔEL, Load, Load_de, 
                         power_data_avde.Load_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
                 
-        plot_cumulative_power(dates, WWSB_de, Load_de, oprod, par.punit, par.fig_dir, fig)
+        plot_cumulative_power(dates, WWSB_de, Load_de, over_production, par.punit, par.fig_dir, fig)
     
         for j in 1:nb_stg
             @infoe j, fig
-            plot_storage_fill_level(dates, Load_de, WWSB_de, WWSB_scaled, stores[j], oprod, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
+            plot_storage_fill_level(dates, Load_de, WWSB_de, WWSB_scaled, stores[j], over_production, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
         end
     end
 end

@@ -35,6 +35,7 @@ function save_detrended_power_data(dpd::DetrendedPowerData, hdf5_path)
     ))
     save_groups_as_hdf5(hdf5_path, groups, script_dir=false, permute_dims_p = true)
 end
+
 function load_detrended_power_data(hdf5_path)
     groups = load_groups_as_hdf5(hdf5_path, script_dir=false, permute_dims_p = true)
     dpd = groups["detrended_power_data"]
@@ -57,4 +58,63 @@ function load_detrended_power_data(hdf5_path)
 
     DetrendedPowerData(dates, uts, Load, Woff, Won, Solar, Bio, WWSBPower, 
         Load_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend ,WWSB_trend)
+end
+
+function save_detrended_power_data_to_db(dpd::DetrendedPowerData, dbname)
+    DataFrame()
+    colnames = [
+        "uts"         ,
+        "Load"        ,
+        "Woff"        ,
+        "Won"         ,
+        "Solar"       ,
+        "Bio"         ,
+        "WWSBPower"   ,
+        "Load_trend"  ,
+        "Woff_trend"  ,
+        "Won_trend"   ,
+        "Solar_trend" ,
+        "Bio_trend"   ,
+        "WWSB_trend"  ] 
+
+    values = [
+        dpd.uts        ,
+        dpd.Load       ,
+        dpd.Woff       ,
+        dpd.Won        ,
+        dpd.Solar      ,
+        dpd.Bio        ,
+        dpd.WWSBPower  ,
+        dpd.Load_trend ,
+        dpd.Woff_trend ,
+        dpd.Won_trend  ,
+        dpd.Solar_trend,
+        dpd.Bio_trend  ,
+        dpd.WWSB_trend ]
+
+    df = DataFrame(colnames .=> values)
+    load_into_db(df, dbname, "detrended_power")    
+end
+
+function load_detrended_power_data_from_db(dbname)
+    df = load_from_db(dbname, "detrended_power")
+
+    uts         = df[!,:uts        ]
+    Load        = df[!,:Load       ]
+    Woff        = df[!,:Woff       ]
+    Won         = df[!,:Won        ]
+    Solar       = df[!,:Solar      ]
+    Bio         = df[!,:Bio        ]
+    WWSBPower   = df[!,:WWSBPower  ]
+    Load_trend  = df[!,:Load_trend ]
+    Woff_trend  = df[!,:Woff_trend ]
+    Won_trend   = df[!,:Won_trend  ]
+    Solar_trend = df[!,:Solar_trend]
+    Bio_trend   = df[!,:Bio_trend  ]
+    WWSB_trend  = df[!,:WWSB_trend ]
+    
+    dates = unix2datetime.(uts)
+
+    DetrendedPowerData(dates, uts, Load, Woff, Won, Solar, Bio, WWSBPower, 
+        Load_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend, WWSB_trend)
 end

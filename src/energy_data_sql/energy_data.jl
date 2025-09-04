@@ -1,6 +1,8 @@
 using Dates
 using PhysConst.UnitConst
 
+include("json_to_sqlite.jl")
+
 function uconversion_factor(eto, efrom)
     @infoe eto, efrom
     Float64(getproperty(uconvert(eto, efrom), :val))
@@ -96,10 +98,11 @@ end
 
     EnergyData constructor
 """
-function PowerData(start_year, end_year, par)
-    total_power = get_total_power(start_year, end_year)
+function PowerData(par)
+    @time total_power = get_total_power(par.start_year, par.end_year)
     for n in names(total_power) println(n)  end
 
+    uts_4     = total_power[!,:unix_seconds]
     Geo_4     = total_power[!,:Geothermal]
     Load_4    = total_power[!,:Load]
     Woff_4    = total_power[!,:Wind_offshore]
@@ -132,12 +135,12 @@ end
 struct InstalledPowerData
     dates   :: Vector{DateTime} # 1
     uts     :: Vector{Int64}    # 2
-    Woff    :: Vector{Float64}  # 3
-    Won     :: Vector{Float64}  # 4
-    Solar   :: Vector{Float64}  # 5
-    Bio     :: Vector{Float64}  # 6
-    BatCap  :: Vector{Float64}  # 7
-    BatPow  :: Vector{Float64}  # 8start_year
+    BatCap  :: Vector{Float64}  # 3
+    BatPow  :: Vector{Float64}  # 4
+    Bio     :: Vector{Float64}  # 5
+    Solar   :: Vector{Float64}  # 6
+    Woff    :: Vector{Float64}  # 7
+    Won     :: Vector{Float64}  # 8
 end
 
 function load_ise_installed_power(hdf5_path)
@@ -145,67 +148,60 @@ function load_ise_installed_power(hdf5_path)
     uts, prodtypes
 end
 
-function load_and_iterpolate_installed_power(hdf5_dir, punit, uts_pubpower, start_year, end_year)
-    total_power = get_total_power(start_year, end_year)
-    installed_power = get_installed_power(start_year, end_year)
+function load_and_iterpolate_installed_power(par, uts_pubpower)
+    installed_power = get_installed_power(par.start_year, par.end_year)
     uts = [datetime2unix(DateTime(x, 7, 1)) for x in installed_power[!, :time]]
-
-    uts_pubpower = total_power[!,:unix_seconds]
 
     cols = """time, Battery_storage_capacity, Battery_storage_power, Biomass, Fossil_brown_coal_lignite, 
         Fossil_gas, Fossil_hard_coal, Fossil_oil, Hydro, Hydro_pumped_storage, Nuclear, Other_non_renewable, 
         Solar_AC, Solar_DC, Solar_planned_EEG_2023, Wind_offshore, Wind_onshore, Wind_onshore_planned_EEG_2023"""
     syms = [Symbol(strip(a)) for a in split(cols, ",")]
+    @infoe syms
 
-    GW_to_unit = uconversion_factor(u_GW, 1.0*punit)
-    installed_power2 = Dict()
+    GW_to_unit = uconversion_factor(u_GW, 1.0*par.punit)
 
+    installed_power_d = Dict()
     for sym in syms
         interp_linear_extrap = linear_interpolation(uts, installed_power[!,sym], extrapolation_bc=Line())
-        installed_power2[sym]  = interp_linear_extrap(uts_pubpower) .* GW_to_unit
+        installed_power_d[sym] = interp_linear_extrap(uts_pubpower) .* GW_to_unit
     end
-    @infoe "n_uts =", length(uts_pubpower)
-    @infoe "size(installed_power2) =", length(keys(installed_power2))
 
-    uts_pubpower, installed_power2
+    @infoe "n_uts =", length(uts_pubpower)
+    @infoe "size(installed_power_d) =", length(keys(installed_power_d))
+
+    installed_power_d
 end
 
-function InstalledPowerData(hdf5_dir, power_data, par)
-    uts_pubpower, installed_power = load_and_iterpolate_installed_power(hdf5_dir, par.punit, power_data.uts)
-
-    name_map = Dict("Bio"    => "Biomass",
-                    "Woff"   => "Wind onshore",
-                    "Won"    => "Wind offshore",
-                    "Solar"  => "Solar",
-                    "BatPow" => "Battery Storage (Power)",
-                    "BatCap" => "Battery Storage (Capacity)")
+function InstalledPowerData(par, power_data)
+    installed_power_d = load_and_iterpolate_installed_power(par, power_data.uts)
+    @infoe keys(installed_power_d)
     
-    Woff    = installed_power[name_map["Woff"  ]] * par.Woff_scale
-    Won     = installed_power[name_map["Won"   ]] * par.Won_scale
-    Solar   = installed_power[name_map["Solar" ]] * par.Solar_scale
-    Bio     = installed_power[name_map["Bio"   ]] * par.Bio_scale
-    BatCap  = installed_power[name_map["BatCap"]]
-    BatPow  = installed_power[name_map["BatPow"]]
+    BatCap   = installed_power_d[:Battery_storage_power]
+    BatPow   = installed_power_d[:Battery_storage_capacity]
+    Bio      = installed_power_d[:Biomass              ] * par.Bio_scale
+    Solar_AC = installed_power_d[:Solar_AC             ] * par.Solar_scale
+    Solar_DC = installed_power_d[:Solar_DC             ] * par.Solar_scale
+    Woff     = installed_power_d[:Wind_offshore        ] * par.Woff_scale
+    Won      = installed_power_d[:Wind_onshore         ] * par.Won_scale
 
-    A = [Woff, Won, Solar, Bio, BatCap, BatPow]
+    A = [BatCap, BatPow, Bio, Solar_AC.+Solar_DC, Woff, Won]
     B = []
     n_rescaled = 0
     for a in A
-        ipmin = minimum(a)
-        ipmax = maximum(a)
-        if ipmin < 1.0e-10*ipmax
-            ipmin = 1.0e-10*ipmax
-            a2 = @. ifelse(a < ipmin, ipmin, a)
+        (pmin, pmax) = extrema(a)
+        if pmin < 1.0e-10*pmax
+            pmin = 1.0e-10*pmax
+            a2 = @. ifelse(a < pmin, pmin, a)
             push!(B,  a2)
             n_rescaled += 1
         else
             push!(B, a)
         end
     end
-    @infoe @sprintf("Installed power: # ipmin < 1.0e-10*ipmax = %d", n_rescaled)
+    @infoe @sprintf("Installed power: # pmin < 1.0e-10*pmax = %d", n_rescaled)
     @infoe @sprintf("interpolated installed data %d", length(B[1]))
-    #                                                    Woff  Won   Sol  Bio   BatCap BatPow
-    InstalledPowerData(power_data.dates, power_data.uts, B[1], B[2], B[3], B[4], B[5], B[6])
+    #                                                    BatCap BatPow Bio   Solar  Woff  Won
+    InstalledPowerData(power_data.dates, power_data.uts, B[1],  B[2],  B[3], B[4],  B[5], B[6])
 end
 
 

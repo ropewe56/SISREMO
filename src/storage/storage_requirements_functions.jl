@@ -1,4 +1,4 @@
-using BaseUtils
+using SimpleLog
 using Statistics
 using Interpolations
 using Printf
@@ -12,8 +12,8 @@ include("storage/utils.jl")
 include("storage/energy_data.jl")
 
 root = dirname(@__DIR__)
-get_data_dir()   = joinpath(root, "data")
-get_fig_dir()    = joinpath(root, "figures")
+get_data_dir() = joinpath(root, "data")
+get_fig_dir()  = joinpath(root, "figures")
 
 """
     dates

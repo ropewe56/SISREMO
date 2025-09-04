@@ -1,4 +1,4 @@
-import BaseUtils
+import SimpleLog
 
 import PyPlot as pl
 pl.pygui(true)
@@ -10,9 +10,9 @@ include("storage_requirements_functions_v2.jl")
 #"python.terminal.activateEnvironment": false
 
 """
-    get_storage_capacities(punit, stc)
+    get_storage_capacities(par, storage_caps)
 
-    par - StorageParamete
+    par - PowerParameter
     storage_caps - storage capacity
 """
 function get_storage_capacities(par, storage_caps)
@@ -30,7 +30,7 @@ function get_storage_capacities(par, storage_caps)
     storage_capacities
 end
 
-function make_parameter()
+function make_parameter(start_year, end_year)
     par = PowerParameter()
     par.punit                        = u_GW # [1u_MW, 1u_GW, 1u_TW][3]
     par.scale_Bio                    = 1.0
@@ -42,6 +42,8 @@ function make_parameter()
     par.scale_with_installed_power_p = true
     par.averaging_hours              = 24*7*4
     par.averaging_method             = [:moving_average, :mean][1]
+    par.start_year                   = start_year
+    par.end_year                     = end_year
     par
 end
 
@@ -63,23 +65,19 @@ function get_paths()
     json_dir, hdf5_dir
 end
 json_dir, hdf5_dir = get_paths()
-start_year = 2016
-end_year = 2025
-par = make_parameter()
+
+par = make_parameter(2016, 2025)
 
 storage_capacities, over_production = storage_and_overproduction(par)
 
-power_data = PowerData(hdf5_dir, start_year, end_year, par);
-detrended_and_scaled_data = renewables_detrend_and_scale(hdf5_dir, power_data, par);
+power_data = PowerData(par);
 
-power_data_de = if par.scale_to_installed_power_p
-    renewables_detrend_and_scale(hdf5_dir, power_data, par);
-else
-    detrend_renewables(power_data);
-end
+detrended_and_scaled_data = renewables_detrend_and_scale(par, power_data);
+dbname = joinpath(par.sisremo_root, "detrended_and_scaled_data.db")
+save_detrended_power_data_to_db(detrended_and_scaled_data, dbname)
+load_detrended_power_data_from_db(dbname);
 
-
-compute_and_plot(hdf5_dir, storage_capacities, over_production, par);
+compute_and_plot(par, power_data, detrended_and_scaled_data, storage_capacities, over_production)
 
 par.fig_dir = par.fig_dir*"_av4"
 compute_and_plot_averaged(storage_capacities, over_production, par);

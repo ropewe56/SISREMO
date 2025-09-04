@@ -235,9 +235,20 @@ function get_installed_power(start_year, end_year)
     cols = SQLite.columns(db, "installed_power").name
     c = join(cols, ", ")
     
-    installed_power = DBInterface.execute(db, "SELECT $c FROM installed_power WHERE time >= $jahr_von AND time <= $jahr_bis;")
+    installed_power = DBInterface.execute(db, "SELECT $c FROM installed_power WHERE time >= $start_year AND time <= $end_year;")
 
     DataFrame(installed_power)
+end
+
+function load_into_db(df, dbname, table)    
+    db = SQLite.DB(dbname)
+    SQLite.load!(df, db, table)
+    db
+end
+
+function load_from_db(dbname, table)    
+    db = SQLite.DB(dbname)
+    DBInterface.execute(db, "SELECT * FROM $table;") |> DataFrame
 end
 
 #start_year = 2017

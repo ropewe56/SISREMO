@@ -2,11 +2,12 @@ import JLD
 using Printf
 using NLopt
 #using Optim
-using BaseUtils
+using SimpleLog
 
 import PyPlot as plt
 plt.pygui(true)
 
+include("../energy_data_sql/sqlite_functions.jl")
 include("../energy_data/detrended_data.jl")
 
 #using Optimization
@@ -289,7 +290,7 @@ function plot_all(sr::SimulationResult)
     plt.figure()
     plt.plot(sr.dates,  sr.Imp.ΔE, label="E_Imp")
     plt.plot(sr.dates, -sr.Exp.ΔE, label="E_Exp")
-    plt.legend()x = [1.0e3, 2.5e4, 1.3]
+    plt.legend()
     sr = compute(x, power_data, nhours, p);
     abs(get_cent_kWh(sr))
     
@@ -430,7 +431,8 @@ function compute(x, power_data, nhours, p::EnergyParameter{T}) where T
 end
 
 T = Float64
-power_data = load_detrended_power_data("save_detrended_power_data.hdf5");
+dbname = joinpath(par.sisremo_root, "detrended_and_scaled_data.db")
+power_data = load_detrended_power_data_from_db(dbname);
 nhours = length(power_data.dates)
 p = EnergyParameter{Float64}();
 
