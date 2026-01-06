@@ -1,6 +1,5 @@
 using CSV
 using DataFrames
-using SimpleLog
 using ForwardDiff
 using NLopt
 

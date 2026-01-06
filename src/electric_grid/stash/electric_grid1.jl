@@ -125,7 +125,7 @@ function request_source(st::AbstractStorage{T}, E, it, Δt) where T
         st.ΔE[it] = st.E[it]
     end
 #    if it < 15
-#        @infoe @sprintf("     %6.3f  %6.3f  %6.3f  %6.3f  %s", st.E[it], E/Δt, st.outP, st.ΔE[it], typeof(st))
+#        @info @sprintf("     %6.3f  %6.3f  %6.3f  %6.3f  %s", st.E[it], E/Δt, st.outP, st.ΔE[it], typeof(st))
 #    end
 
     st.ΔE[it] * st.ηout

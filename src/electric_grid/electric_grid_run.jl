@@ -2,7 +2,6 @@ import JLD
 using Printf
 using NLopt
 #using Optim
-using SimpleLog
 
 import PyPlot as plt
 plt.pygui(true)
@@ -174,7 +173,7 @@ function print_results(sr)
     fval   = get_cent_kWh(sr)
 
     #dt = (t2-t1)*1.0e-9 + (t3-t2)*1.0e-9 + (t4-t3)*1.0e-9
-    @infoe @sprintf("minH2O = %10.4e, ΔH2O = %10.4e, sumRes = %10.4e, sumCurt = %10.4e", minH2O, ΔH2O, sum(sr.Res.ΔE), sum(sr.Cur.ΔE))
+    @info @sprintf("minH2O = %10.4e, ΔH2O = %10.4e, sumRes = %10.4e, sumCurt = %10.4e", minH2O, ΔH2O, sum(sr.Res.ΔE), sum(sr.Cur.ΔE))
 
     @printf("sumELoad0   = %11.4e\n", sr.sumELoad0)
     @printf("sumLoadΔE   = %11.4e\n", sr.sumLoadΔE)

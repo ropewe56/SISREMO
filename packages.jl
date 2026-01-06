@@ -1,6 +1,5 @@
 using Pkg
 
-Pkg.develop(url="/home/wester/Projects/Julia/Utilities/SimpleLog.jl")
 Pkg.develop(url="/home/wester/Projects/Julia/Physics/PhysConst.jl")
 
 Pkg.add("CSV")
@@ -22,3 +21,5 @@ Pkg.add("Tables")
 Pkg.add("TimeZones")
 Pkg.add("SQLite")
 Pkg.add("StringEncodings")
+Pkg.add("Logging")
+Pkg.add("LoggingExtras")

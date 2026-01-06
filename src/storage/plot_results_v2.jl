@@ -39,7 +39,7 @@ function plot_powers(dates::Vector{DateTime}, Load_ec::Vector{Float64}, Load::Ve
         pl.title(@sprintf("averaged, %d days window", div(averaging_hours,24)))
         pl.savefig(joinpath(fig_dir, @sprintf("WWSB_averaged.png")))
     else
-        @infoe fig_dir
+        @info fig_dir
         pl.savefig(joinpath(fig_dir, @sprintf("WWSB.png")))
     end
 end
@@ -108,12 +108,12 @@ end
 function plot_cumulative_power(dates, WWSB, Load, oprod, punit, fig_dir, fig)
     pl.figure(fig[1]); fig[1] += 1
     cΔEL = cumsum(WWSB .- Load)
-    @infoe 1, cΔEL[end]
+    @info 1, cΔEL[end]
     pl.plot(dates, cΔEL, label = "o=1")
     for op in oprod
         cΔEL = cumsum(WWSB.*op .- Load)
         pl.plot(dates, cΔEL, label = @sprintf("o=%f", op))
-        @infoe op, cΔEL[end]
+        @info op, cΔEL[end]
     end
     pl.xlabel("time")
     pl.ylabel(@sprintf("(WWSB - LOad) [%s]", punit))
@@ -131,7 +131,7 @@ function plot_storage_fill_level(dates::Vector{DateTime}, Load_de::Vector{Float6
     
     title = @sprintf("S_%d", j)
     pngpath = @sprintf("S_%d.png", j)
-    @infoe title
+    @info title
 
     prozent = "%"
     pl.figure(fig[1]); fig[1] += 1

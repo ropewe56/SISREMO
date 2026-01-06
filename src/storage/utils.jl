@@ -114,7 +114,7 @@ function averaging(data, dates, averaging_hours; method = :moving_average)
     elseif method == :mean
         mean_averaging(data, dates, averaging_hours)
     else
-        @infoe @sprintf("method %s not vaialable", method)
+        @info @sprintf("method %s not vaialable", method)
     end
 
     if length(avdata) == length(avdates)
@@ -218,8 +218,8 @@ function detrend_EE(Load, EE, Load_avme, Load_avmo, EE_avme, EE_avmo, dates_avme
     EE_avma_scaled_de3 = EE_avma_scaled_de3 .* (ls/es3)
     diff3 = (EE_avma_scaled_de3 - Load_avmo) # MW
 
-    @infoe @sprintf("sum(diff2) = %e", sum(diff2))
-    @infoe @sprintf("sum(diff3) = %e", sum(diff3))
+    @info @sprintf("sum(diff2) = %e", sum(diff2))
+    @info @sprintf("sum(diff3) = %e", sum(diff3))
 
     pl.figure()
     pl.plot(dates, 1.0e-6.*EE_avmo_scaled,     label = "EE_avmo_scaled")

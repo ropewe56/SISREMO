@@ -1,17 +1,7 @@
-using DataStructures
-using OrderedCollections
-using DataFrames
-using HTTP
-import Dates
-using Printf
-using JSON3
-using SimpleLog
-
 
 function dates_to_uts(date)
     floor(Int64, Dates.datetime2unix(date))
 end
-
 
 ###> start download
 """
@@ -27,7 +17,7 @@ function download_ise_power_data(json_dir, year_, get_)
     query = [("country" => "de"), ("start", @sprintf("%s-01-01T00:00Z",year_)), ("end", @sprintf("%s-12-31T23:59Z", year_))]
     url   = "https://api.energy-charts.info/"*get_
     
-    @infoe @sprintf("Download %s: %d", get_, year_)
+    @info @sprintf("Download %s: %d", get_, year_)
     resp  = HTTP.get(url, ["Accept" => "application/json"], query = query)
 
     b     = String(resp.body)
@@ -36,7 +26,7 @@ function download_ise_power_data(json_dir, year_, get_)
     open(path, "w") do out
         JSON3.pretty(out, bb)
     end
-    @infoe @sprintf("saved to %s", path)
+    @info @sprintf("saved to %s", path)
 end
 
 function load_ise_energy_chart_data(json_dir, start_year, end_year, get)
@@ -66,7 +56,7 @@ function download_ise_istalled_power_data(json_dir)
 
     bbb = Dict("unix_seconds" => uts, "production_types" => bb["production_types"])
     for (n,d) in bbb["production_types"]
-        @infoe n
+        @info n
     end
 
     open(joinpath(json_dir, "installed_power.json"), "w") do out
@@ -86,7 +76,11 @@ function download_ise_data(json_dir, start_year, end_year)
 end
 ###< end download
 
-jsonroot = joinpath(dataroot)
-json_dir, start_year, end_year = dataroot, 2025, 2025
+jsonroot = joinpath(dataroot, "json")
+json_dir, start_year, end_year = jsonroot, 2025, 2025
 
 download_ise_data(json_dir, start_year, end_year)
+
+
+function json_to_dataframe()
+    gets = ["public_power", "total_power", "installed_power", "cbpf"]

@@ -1,7 +1,7 @@
 import JLD
 using Printf
 
-using SimpleLog
+using 
 
 import PyPlot as plt
 plt.pygui(true)

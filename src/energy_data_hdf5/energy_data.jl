@@ -2,7 +2,7 @@ using Dates
 using PhysConst.UnitConst
 
 function uconversion_factor(eto, efrom)
-    @infoe eto, efrom
+    @info eto, efrom
     Float64(getproperty(uconvert(eto, efrom), :val))
 end
 
@@ -93,7 +93,7 @@ function PowerData(hdf5_dir, start_year, end_year, par)
     uts = uts_4[1:4:end][1:nl]
     dates = Dates.unix2datetime.(uts)
 
-    @infoe @sprintf("# timesteps = %d, length(Load) = %d, energy conversion = %e", length(uts), length(Load), MW_to_unit)
+    @info @sprintf("# timesteps = %d, length(Load) = %d, energy conversion = %e", length(uts), length(Load), MW_to_unit)
 
     PowerData(dates, uts, Load, Woff, Won, Solar, Bio, Nuclear, WWSBPower)
 end
@@ -126,8 +126,8 @@ function load_and_iterpolate_installed_power(hdf5_dir, punit, uts_pubpower)
         interp_linear_extrap = linear_interpolation(uts, p, extrapolation_bc=Line())
         installed_power2[k]  = interp_linear_extrap(uts_pubpower) .* GW_to_unit
     end
-    @infoe "n_uts =", length(uts_pubpower)
-    @infoe "size(installed_power2) =", length(keys(installed_power2))
+    @info "n_uts =", length(uts_pubpower)
+    @info "size(installed_power2) =", length(keys(installed_power2))
 
     uts_pubpower, installed_power2
 end
@@ -164,8 +164,8 @@ function InstalledPowerData(hdf5_dir, power_data, par)
             push!(B, a)
         end
     end
-    @infoe @sprintf("Installed power: # ipmin < 1.0e-10*ipmax = %d", n_rescaled)
-    @infoe @sprintf("interpolated installed data %d", length(B[1]))
+    @info @sprintf("Installed power: # ipmin < 1.0e-10*ipmax = %d", n_rescaled)
+    @info @sprintf("interpolated installed data %d", length(B[1]))
     #                                                    Woff  Won   Sol  Bio   BatCap BatPow
     InstalledPowerData(power_data.dates, power_data.uts, B[1], B[2], B[3], B[4], B[5], B[6])
 end

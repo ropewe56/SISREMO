@@ -4,7 +4,7 @@ using PhysConst.UnitConst
 include("json_to_sqlite.jl")
 
 function uconversion_factor(eto, efrom)
-    @infoe eto, efrom
+    @info eto, efrom
     Float64(getproperty(uconvert(eto, efrom), :val))
 end
 
@@ -127,7 +127,7 @@ function PowerData(par)
     uts = uts_4[1:4:end][1:nl]
     dates = Dates.unix2datetime.(uts)
 
-    @infoe @sprintf("# timesteps = %d, length(Load) = %d, energy conversion = %e", length(uts), length(Load), MW_to_unit)
+    @info @sprintf("# timesteps = %d, length(Load) = %d, energy conversion = %e", length(uts), length(Load), MW_to_unit)
 
     PowerData(dates, uts, Load, Woff, Won, Solar, Bio, Nuclear, WWSBPower)
 end
@@ -156,7 +156,7 @@ function load_and_iterpolate_installed_power(par, uts_pubpower)
         Fossil_gas, Fossil_hard_coal, Fossil_oil, Hydro, Hydro_pumped_storage, Nuclear, Other_non_renewable, 
         Solar_AC, Solar_DC, Solar_planned_EEG_2023, Wind_offshore, Wind_onshore, Wind_onshore_planned_EEG_2023"""
     syms = [Symbol(strip(a)) for a in split(cols, ",")]
-    @infoe syms
+    @info syms
 
     GW_to_unit = uconversion_factor(u_GW, 1.0*par.punit)
 
@@ -166,15 +166,15 @@ function load_and_iterpolate_installed_power(par, uts_pubpower)
         installed_power_d[sym] = interp_linear_extrap(uts_pubpower) .* GW_to_unit
     end
 
-    @infoe "n_uts =", length(uts_pubpower)
-    @infoe "size(installed_power_d) =", length(keys(installed_power_d))
+    @info "n_uts =", length(uts_pubpower)
+    @info "size(installed_power_d) =", length(keys(installed_power_d))
 
     installed_power_d
 end
 
 function InstalledPowerData(par, power_data)
     installed_power_d = load_and_iterpolate_installed_power(par, power_data.uts)
-    @infoe keys(installed_power_d)
+    @info keys(installed_power_d)
     
     BatCap   = installed_power_d[:Battery_storage_power]
     BatPow   = installed_power_d[:Battery_storage_capacity]
@@ -198,8 +198,8 @@ function InstalledPowerData(par, power_data)
             push!(B, a)
         end
     end
-    @infoe @sprintf("Installed power: # pmin < 1.0e-10*pmax = %d", n_rescaled)
-    @infoe @sprintf("interpolated installed data %d", length(B[1]))
+    @info @sprintf("Installed power: # pmin < 1.0e-10*pmax = %d", n_rescaled)
+    @info @sprintf("interpolated installed data %d", length(B[1]))
     #                                                    BatCap BatPow Bio   Solar  Woff  Won
     InstalledPowerData(power_data.dates, power_data.uts, B[1],  B[2],  B[3], B[4],  B[5], B[6])
 end

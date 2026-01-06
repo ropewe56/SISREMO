@@ -4,7 +4,7 @@ using DataFrames
 import Dates
 using Printf
 using JSON3
-using SimpleLog
+using 
 
 function uts_to_dates(uts)
     Dates.unix2datetime(uts)
@@ -44,10 +44,10 @@ function installed_power_to_hdf5(json_dir, hdf5_dir)
     end
 
     uts = IP["unix_seconds"]
-    @infoe "installed power:", uts_to_dates(uts[1]), uts_to_dates(uts[end])
+    @info "installed power:", uts_to_dates(uts[1]), uts_to_dates(uts[end])
     prodtypes = IP["production_types"]
     for (n,d) in prodtypes
-        @infoe n
+        @info n
     end
 
     ip_keys = ["Wind onshore", "Wind offshore", "Solar",  "Biomass", "Battery Storage (Capacity)", "Battery Storage (Power)"]    
@@ -62,14 +62,14 @@ function installed_power_to_hdf5(json_dir, hdf5_dir)
             end
         end
         if !flag
-            @infoe @sprintf("key %s not in data", k)
+            @info @sprintf("key %s not in data", k)
         end
     end
     datasets["uts"] = Array{Float64}(uts)
     groups = Dict("installed_power" => datasets)
     hdf5_path = joinpath(hdf5_dir, "installed_power.hdf5")
 
-    @infoe "Save installed_power to", hdf5_path
+    @info "Save installed_power to", hdf5_path
     save_groups_as_hdf5(hdf5_path, groups, script_dir=false, permute_dims_p = true)
 end
 
@@ -145,7 +145,7 @@ function ise_json_to_dict(fname, tname, pname, json_dir; start_year::Int64, end_
                 Vector{Float64}(data)
             catch
                 V = Vector{Float64}(undef,0)
-                #@infoe ise_keys[i], typeof(d[ise_keys[i]])
+                #@info ise_keys[i], typeof(d[ise_keys[i]])
                 for e in data
                     if typeof(e) == Float64
                         push!(V, e)
@@ -159,7 +159,7 @@ function ise_json_to_dict(fname, tname, pname, json_dir; start_year::Int64, end_
         end
         
         fname = splitext(df)[1]
-        @infoe fname
+        @info fname
         tt = if eltype(d[tname]) == String
             [parse(Float64, x) for x in d[tname]]
         else
@@ -237,10 +237,10 @@ function save_ise_data_to_hdf5(hdf5_dir, hdf5_name, time_stamps, datasets, start
         mat[:,1] = time_stamps[fname]
         for (prodtype, data) in D
             i = dpr[prodtype]
-            #@infoe fname, i, prodtype
+            #@info fname, i, prodtype
             mat[:,i+1] = data
         end
-        #@infoe size(mat)
+        #@info size(mat)
         push!(matmat, mat)
     end
     DD = reduce(vcat, matmat)

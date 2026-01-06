@@ -24,14 +24,14 @@ function make_funcs(power_data, nhours, p)print_results(sr)
     function fn(x, p)
         sr = compute(x, power_data, nhours, p)
         r = abs(get_cent_kWh(sr))
-        @infoe x, r
+        @info x, r
         r
     end
 
     function fnd(x)
         sr = compute(x, power_data, nhours, p)
         r = abs(get_cent_kWh(sr))
-        @infoe x, r
+        @info x, r
         r
     end
 
@@ -54,9 +54,9 @@ function make_funcs(power_data, nhours, p)print_results(sr)
         G[2] = (f2-f0)/δ[2]
         G[3] = (f3-f0)/δ[3]
 
-        @infoe x, G
+        @info x, G
         #G .= FiniteDifferences.grad(fdm, fnd, x)
-        #@infoe x, G
+        #@info x, G
     end
 
     function fncons(x, p)
@@ -124,7 +124,7 @@ function fn(u, p)
     sr = compute(x, power_data, nhours, p)
     r = abs(get_cent_kWh(sr))
     m = minimum(sr.H2O.E)
-    @infoe x, r, m
+    @info x, r, m
     m
 end
 
@@ -138,7 +138,7 @@ function fngrad(G, u, p)
 
     G[1] = (f1-f0)/δ
     #G .= FiniteDifferences.grad(fdm, fnd, x)
-    @infoe u, G
+    @info u, G
 end
 
 #fn, fngrad, fncons = make_funcs(power_data, nhours, p);

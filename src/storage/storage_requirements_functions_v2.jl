@@ -1,4 +1,4 @@
-using SimpleLog
+using 
 using Statistics
 using Interpolations
 using Printf
@@ -125,13 +125,13 @@ function renewables_detrend_and_scale(par, power_data)
     end
 
     Woff_sc, Won_sc, Solar_sc, WWSB_sc, sc = scale_power(Load_de, Woff_de, Won_de, Solar_de, Bio_de)
-    @infoe @sprintf("scale_factor = %f", sc)
+    @info @sprintf("scale_factor = %f", sc)
 
     WWSB_de, WWSB_trend = detrend_time_series(WWSB_sc)
 
     Load_sum = sum(Load_de)
     WWSB_sum = sum(WWSB_sc)
-    @infoe @sprintf("Load_sum = %10.4e, WWSB_sum = %10.4e, sum_L-sum_P = %10.4e", Load_sum, WWSB_sum, Load_sum-WWSB_sum)
+    @info @sprintf("Load_sum = %10.4e, WWSB_sum = %10.4e, sum_L-sum_P = %10.4e", Load_sum, WWSB_sum, Load_sum-WWSB_sum)
 
     powers_de = DetrendedPowerData(power_data.dates, power_data.uts, 
                     Load_de, Woff_sc, Won_sc, Solar_sc, Bio_de, WWSB_de, 
@@ -296,8 +296,8 @@ function compute_storage_level(load, scaled_renewables, storage_capacities, op::
         st_out = sum(stg.I6)
         other  = sum(stg.I7)
         curt   = sum(stg.I5)
-        @infoe @sprintf("storage_i = %d, op = %3.1f, capacity = %8.2e, storage_fill[end] = %8.2e", j, op, stg.SC, stg.SF[end])
-        @infoe @sprintf("direct = %8.2e, st_in = %8.2e, st_out = %8.2e, other = %8.2e, curt = %8.2e", direct, st_in, st_out, other, curt)
+        @info @sprintf("storage_i = %d, op = %3.1f, capacity = %8.2e, storage_fill[end] = %8.2e", j, op, stg.SC, stg.SF[end])
+        @info @sprintf("direct = %8.2e, st_in = %8.2e, st_out = %8.2e, other = %8.2e, curt = %8.2e", direct, st_in, st_out, other, curt)
 
         sum_I2 += direct
         sum_I6 += st_out
@@ -305,7 +305,7 @@ function compute_storage_level(load, scaled_renewables, storage_capacities, op::
 
     sum_I7 = sum(storages[end].I7)
     sum_I5 = sum(storages[end].I5)
-    @infoe @sprintf("sum: (direct+out+other) = %10.4e, curtailment = %10.4e", (sum_I2 + sum_I6 + sum_I7), sum_I5)
+    @info @sprintf("sum: (direct+out+other) = %10.4e, curtailment = %10.4e", (sum_I2 + sum_I6 + sum_I7), sum_I5)
 
     storages, scaled_renewables
 end
@@ -314,13 +314,13 @@ end
     compute storage fill level for different combinations of storage_capacity and over_production
 """
 function compute_storage_fill_level(powers, storage_capacities::Vector{Float64}, over_production::Vector{Float64}, SF1_factor)
-    @infoe @sprintf("==== compute_storage_fill_level ===================================================================")
+    @info @sprintf("==== compute_storage_fill_level ===================================================================")
 
     storages_v = []
     scaled_renewables_v = Vector{Vector{Float64}}(undef,0)
     for (i, op) in enumerate(over_production)
-        @infoe @sprintf("==== %d", i)
-        @infoe @sprintf("storage_capacities = %s, over_production = %f", storage_capacities[i], op)
+        @info @sprintf("==== %d", i)
+        @info @sprintf("storage_capacities = %s, over_production = %f", storage_capacities[i], op)
         scaled_renewables = get_scaled_renewables(powers, op)
         storages, scaled_renewables = compute_storage_level(powers.Load, scaled_renewables, storage_capacities[i], op, SF1_factor)
         push!(storages_v, storages)
@@ -374,7 +374,7 @@ function compute_and_plot(par, power_data, power_data_de, storage_capacities, ov
     dates = power_data.dates
 
     nb_stg = length(storages_v[1])
-    @infoe "nb_stg =", nb_stg
+    @info "nb_stg =", nb_stg
     stores = []
     for j in 1:nb_stg
         push!(stores, [])
@@ -386,7 +386,7 @@ function compute_and_plot(par, power_data, power_data_de, storage_capacities, ov
     end
 
     if par.plot_p
-        @infoe @sprintf("fig_dir = %s", par.fig_dir)
+        @info @sprintf("fig_dir = %s", par.fig_dir)
 
         fig      = [1]
         Load     = power_data.Load
@@ -403,7 +403,7 @@ function compute_and_plot(par, power_data, power_data_de, storage_capacities, ov
         plot_cumulative_power(dates, WWSB_de, Load_de, over_production, par.punit, par.fig_dir, fig)
 
         for j in 1:nb_stg
-            @infoe j, fig
+            @info j, fig
             plot_storage_fill_level(dates, Load_de, WWSB_de, WWSB_scaled, stores[j], 
                 over_production, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
         end
@@ -428,7 +428,7 @@ function compute_and_plot_averaged(storage_capacities::Vector{Float64}, over_pro
     nb_stg = length(storages_v[1])
 
     nb_stg = length(storages_v[1])
-    @infoe @sprintf("nb_storages = %s", nb_stg)
+    @info @sprintf("nb_storages = %s", nb_stg)
     stores = []
     for j in 1:nb_stg
         push!(stores, [])
@@ -440,7 +440,7 @@ function compute_and_plot_averaged(storage_capacities::Vector{Float64}, over_pro
     end
 
     if par.plot_p
-        @infoe @sprintf("fig_dir = %s", par.fig_dir)
+        @info @sprintf("fig_dir = %s", par.fig_dir)
 
         fig = [1]
         Load    = power_data_av.Load
@@ -459,7 +459,7 @@ function compute_and_plot_averaged(storage_capacities::Vector{Float64}, over_pro
         plot_cumulative_power(dates, WWSB_de, Load_de, over_production, par.punit, par.fig_dir, fig)
     
         for j in 1:nb_stg
-            @infoe j, fig
+            @info j, fig
             plot_storage_fill_level(dates, Load_de, WWSB_de, WWSB_scaled, stores[j], over_production, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
         end
     end
@@ -478,10 +478,10 @@ end
 #        SF1  = stg1.SF[end] / Load_per_year
 #        SF2  = stg2.SF[end] / Load_per_year
 #
-#        @infoe @sprintf("==== comp_and_plot ================================================================================")
-#        @infoe @sprintf("op = %3.1f,  sc1 = %10.4e, sc2 = %10.4e, SF1[end] = %8.2e, SF2[end] = %8.2e, Load/y = %8.2e", op, stg1.SC, stg2.SC, stg1.SF[end], stg2.SF[end], Load_per_year)
-#        @infoe @sprintf("IF1 = %10.4e, OF1 = %10.4e, IF1-OF1 = %10.4e, SF1[end] = %10.4e, CT1 = %10.4e, IM1 = %10.4e", IF1, OF1,  IF1-OF1, SF1, CT1, IM1)
-#        @infoe @sprintf("IF2 = %10.4e, OF2 = %10.4e, IF2-OF2 = %10.4e, SF2[end] = %10.4e, CT2 = %10.4e, IM2 = %10.4e", IF2, OF2,  IF1-OF2, SF2, CT2, IM2)
+#        @info @sprintf("==== comp_and_plot ================================================================================")
+#        @info @sprintf("op = %3.1f,  sc1 = %10.4e, sc2 = %10.4e, SF1[end] = %8.2e, SF2[end] = %8.2e, Load/y = %8.2e", op, stg1.SC, stg2.SC, stg1.SF[end], stg2.SF[end], Load_per_year)
+#        @info @sprintf("IF1 = %10.4e, OF1 = %10.4e, IF1-OF1 = %10.4e, SF1[end] = %10.4e, CT1 = %10.4e, IM1 = %10.4e", IF1, OF1,  IF1-OF1, SF1, CT1, IM1)
+#        @info @sprintf("IF2 = %10.4e, OF2 = %10.4e, IF2-OF2 = %10.4e, SF2[end] = %10.4e, CT2 = %10.4e, IM2 = %10.4e", IF2, OF2,  IF1-OF2, SF2, CT2, IM2)
 #    end
 #
 #    if plot_p

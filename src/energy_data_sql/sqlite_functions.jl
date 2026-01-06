@@ -9,7 +9,7 @@ using DataFrames
 using CSV
 using StringEncodings
 using OrderedCollections
-using SimpleLog
+using 
 
 function get_jsonlists(jsonroot, categories)
     jlist = readdir(jsonroot)
@@ -169,7 +169,7 @@ function create_sqlite_db!(db, jsonfiles, categories)
         else
             @warne colsyms0
         end
-        @infoe cat, tt
+        @info cat, tt
         df0 = load_files(jsonfiles[cat], colsyms0)
         colnames = names(df0)
 
@@ -179,11 +179,11 @@ function create_sqlite_db!(db, jsonfiles, categories)
             "time"
         end
         if tt === nothing
-            @infoe colnames
+            @info colnames
         end
-        @infoe tt
-        @infoe names(df0)
-        @infoe SQLite.columns(db, "public_power")
+        @info tt
+        @info names(df0)
+        @info SQLite.columns(db, "public_power")
         
         SQLite.load!(df0, db, cat)
         SQLite.removeduplicates!(db, cat, [tt])

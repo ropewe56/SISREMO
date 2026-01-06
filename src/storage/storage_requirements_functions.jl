@@ -1,4 +1,4 @@
-using SimpleLog
+using 
 using Statistics
 using Interpolations
 using Printf
@@ -56,7 +56,7 @@ function scale_and_detrend(Load::Vector{Float64}, RP::Vector{Float64})
     Load_de = @. Load * Load_trend[nh] / Load_trend
 
     scale = (mean(Load) / mean(RP))
-    #@infoe @sprintf("(mean(RP) / mean(Load)) = %3.2f", 1.0/scale)
+    #@info @sprintf("(mean(RP) / mean(Load)) = %3.2f", 1.0/scale)
 
     # scale RP
     RP_sc = @. RP * scale
@@ -175,7 +175,7 @@ function compute_storage_level(dates::Vector{DateTime}, Load::Vector{Float64}, R
         end
     end
 
-    @infoe @sprintf("op = %3.1f, SC1 = %8.2e, SC2 = %8.2e, SF1[end] = %8.2e, SF2[end] = %8.2e", oprod, stg1.SC, stg2.SC, stg1.SF[end], stg2.SF[end])
+    @info @sprintf("op = %3.1f, SC1 = %8.2e, SC2 = %8.2e, SF1[end] = %8.2e, SF2[end] = %8.2e", oprod, stg1.SC, stg2.SC, stg1.SF[end], stg2.SF[end])
 
     IF1 = sum(stg1.IF)
     OF1 = sum(stg1.OF)
@@ -185,8 +185,8 @@ function compute_storage_level(dates::Vector{DateTime}, Load::Vector{Float64}, R
     OF2 = sum(stg2.OF)
     SF2 = stg2.SF[end]
 
-    @infoe @sprintf("IF1 = %9.3e, OF1 = %9.3e, SF1[end] = %9.3e, B1 = %9.3e", IF1, OF1, SF1,  IF1 - OF1 - SF1)
-    @infoe @sprintf("IF2 = %9.3e, OF2 = %9.3e, SF2[end] = %9.3e, B2 = %9.3e", IF2, OF2, SF2,  IF2 - OF2 - SF2)
+    @info @sprintf("IF1 = %9.3e, OF1 = %9.3e, SF1[end] = %9.3e, B1 = %9.3e", IF1, OF1, SF1,  IF1 - OF1 - SF1)
+    @info @sprintf("IF2 = %9.3e, OF2 = %9.3e, SF2[end] = %9.3e, B2 = %9.3e", IF2, OF2, SF2,  IF2 - OF2 - SF2)
 
     (stg1, stg2)
 end
@@ -195,7 +195,7 @@ end
     compute storage fill level for different combinations of storage_capacity and over_production
 """
 function compute_storage_fill_level(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{Float64}, punit::String, stc1, stc2, oprod; log_p = false)
-    @infoe @sprintf("==== compute_storage_fill_level ===================================================================")
+    @info @sprintf("==== compute_storage_fill_level ===================================================================")
 
     res1 = []
     res2 = []
@@ -267,7 +267,7 @@ function plot_powers(dates::Vector{DateTime}, Load::Vector{Float64}, RP::Vector{
         pl.title(@sprintf("averaged, %d days window", div(averaging_hours,24)))
         pl.savefig(joinpath(fig_dir, @sprintf("RP_averaged.png")))
     else
-        @infoe fig_dir
+        @info fig_dir
         pl.savefig(joinpath(fig_dir, @sprintf("RP.png")))
     end
 end
@@ -437,7 +437,7 @@ function load_data(data_dir, punit, start_year, end_year; scale_to_installed_pow
         plt.title("RP 1")
 
         scale = mean(Load) / mean(RP)
-        @infoe mean(Load), mean(RP), scale
+        @info mean(Load), mean(RP), scale
         RP = @. RP * scale
 
         plt.figure()
@@ -453,18 +453,18 @@ function load_data(data_dir, punit, start_year, end_year; scale_to_installed_pow
 
     # dates
     dates = data.dates
-    @infoe @sprintf("start: (%d, %d, %d), stop: (%d, %d, %d)",
+    @info @sprintf("start: (%d, %d, %d), stop: (%d, %d, %d)",
         Dates.day(dates[1]),   Dates.month(dates[1]),   Dates.year(dates[1]),
         Dates.day(dates[end]), Dates.month(dates[end]), Dates.year(dates[end]))
 
     # energy-chart data => 15 min time resolution, 1h = 60 * 60 * 1000 ms = 3.6e6 ms
-    @infoe @sprintf("RE = %8.2e %sh", powers_to_energy_per_year(dates, RP  ), punit)
-    @infoe @sprintf("LE = %8.2e %sh", powers_to_energy_per_year(dates, Load), punit)
+    @info @sprintf("RE = %8.2e %sh", powers_to_energy_per_year(dates, RP  ), punit)
+    @info @sprintf("LE = %8.2e %sh", powers_to_energy_per_year(dates, Load), punit)
 
     RP_de, RP_trend, ΔEL, Load_de, Load_trend = scale_and_detrend(Load, RP);
 
-    @infoe @sprintf("RE_de = %8.2e %sh", powers_to_energy_per_year(dates, RP_de  ), punit)
-    @infoe @sprintf("LE_de = %8.2e %sh", powers_to_energy_per_year(dates, Load_de), punit)
+    @info @sprintf("RE_de = %8.2e %sh", powers_to_energy_per_year(dates, RP_de  ), punit)
+    @info @sprintf("LE_de = %8.2e %sh", powers_to_energy_per_year(dates, Load_de), punit)
 
     dates, Load, RP, RP_de, RP_trend, ΔEL, Load_de, Load_trend
 end
@@ -492,10 +492,10 @@ function comp_and_plot(stc1, stc2, oprod, data_dir, fig_dir, punit, start_year, 
         SF1  = stg1.SF[end] / Load_per_year
         SF2  = stg2.SF[end] / Load_per_year
 
-        @infoe @sprintf("==== comp_and_plot ================================================================================")
-        @infoe @sprintf("op = %3.1f,  sc1 = %10.4e, sc2 = %10.4e, SF1[end] = %8.2e, SF2[end] = %8.2e, Load/y = %8.2e", op, stg1.SC, stg2.SC, stg1.SF[end], stg2.SF[end], Load_per_year)
-        @infoe @sprintf("IF1 = %10.4e, OF1 = %10.4e, IF1-OF1 = %10.4e, SF1[end] = %10.4e, CT1 = %10.4e, IM1 = %10.4e", IF1, OF1,  IF1-OF1, SF1, CT1, IM1)
-        @infoe @sprintf("IF2 = %10.4e, OF2 = %10.4e, IF2-OF2 = %10.4e, SF2[end] = %10.4e, CT2 = %10.4e, IM2 = %10.4e", IF2, OF2,  IF1-OF2, SF2, CT2, IM2)
+        @info @sprintf("==== comp_and_plot ================================================================================")
+        @info @sprintf("op = %3.1f,  sc1 = %10.4e, sc2 = %10.4e, SF1[end] = %8.2e, SF2[end] = %8.2e, Load/y = %8.2e", op, stg1.SC, stg2.SC, stg1.SF[end], stg2.SF[end], Load_per_year)
+        @info @sprintf("IF1 = %10.4e, OF1 = %10.4e, IF1-OF1 = %10.4e, SF1[end] = %10.4e, CT1 = %10.4e, IM1 = %10.4e", IF1, OF1,  IF1-OF1, SF1, CT1, IM1)
+        @info @sprintf("IF2 = %10.4e, OF2 = %10.4e, IF2-OF2 = %10.4e, SF2[end] = %10.4e, CT2 = %10.4e, IM2 = %10.4e", IF2, OF2,  IF1-OF2, SF2, CT2, IM2)
 
     end
 

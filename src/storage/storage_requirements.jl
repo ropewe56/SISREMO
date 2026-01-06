@@ -1,4 +1,4 @@
-using SimpleLog
+using 
 
 import PyPlot as pl
 pl.pygui(true)
