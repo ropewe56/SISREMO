@@ -9,7 +9,6 @@ using DataFrames
 using CSV
 using StringEncodings
 using OrderedCollections
-using 
 
 function get_jsonlists(jsonroot, categories)
     jlist = readdir(jsonroot)
