@@ -9,6 +9,8 @@ using JSON3
 using SQLite
 
 include("../init_logging.jl")
+include("select_from_db.jl")
+
 include("ise_energy_charts_download.jl")
 include("json_to_dataframes.jl")
 
