@@ -1,5 +1,3 @@
-include("include_energy_data.jl")
-
 function get_last_unix_seconds(table, db)
     df = DBInterface.execute(db, "SELECT unix_seconds FROM $table;") |> DataFrame
     maximum(df[!,:unix_seconds])
@@ -49,5 +47,5 @@ end
 
 #start_year, end_year = dataroot, 2025, 2025
 #download_ise_data(jsonroot, start_year, end_year)
-add_new_data_to_db()
+#add_new_data_to_db()
 

@@ -1,6 +1,5 @@
 function select_from_db(date1, date2)
-    dbname = joinpath(dataroot, "ise_data.sqlite")
-    db = SQLite.DB(dbname)
+    db = SQLite.DB(DBPATH)
 
     uts1 = datetime2unix(date1)
     uts2 = datetime2unix(date2)
@@ -20,6 +19,6 @@ function select_from_db(date1, date2)
     d
 end
 
-date1 = DateTime("2020-01-01")
-date2 = DateTime("2022-12-31")
-d = select_from_db(date1, date2)
+#date1 = DateTime("2020-01-01")
+#date2 = DateTime("2022-12-31")
+#d = select_from_db(date1, date2)
