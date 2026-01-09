@@ -19,9 +19,3 @@ function select_from_db(date1, date2, tables)
     end
     d
 end
-
-#date1 = DateTime("2020-01-01")
-#date2 = DateTime("2022-12-31")
-tables = ["total_power", "public_power", "cbpf", "installed_power"]
-tables = ["public_power"]
-#d = select_from_db(date1, date2, tables)
