@@ -76,14 +76,11 @@ date2 = DateTime("2025-12-31")
 power_data = get_public_power_data(date1, date2, par)
 installed_power = get_installed_power_data(power_data, par)
 
-get_detrended_power_data(power_data, installed_power, par)
+detrended_and_scaled_data = get_detrended_power_data(power_data, installed_power, par)
+arrow_path = joinpath(par.sisremo_root, "detrended_and_scaled_data.arrow")
+save_to_arrow(detrended_and_scaled_data, arrow_path)
 
-detrended_and_scaled_data = get_detrended_power_data(power_data, installed_power, par)(par, power_data);
-dbname = joinpath(par.sisremo_root, "detrended_and_scaled_data.db")
-save_detrended_power_data_to_db(detrended_and_scaled_data, dbname)
-load_detrended_power_data_from_db(dbname);
-
-compute_and_plot(par, power_data, detrended_and_scaled_data, storage_capacities, over_production)
+compute_and_plot(par, PowerData(power_data), DetrendedPowerData(detrended_and_scaled_data), storage_capacities, over_production)
 
 par.fig_dir = par.fig_dir*"_av4"
 compute_and_plot_averaged(storage_capacities, over_production, par);

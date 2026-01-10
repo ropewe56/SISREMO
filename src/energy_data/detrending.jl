@@ -15,61 +15,79 @@ struct DetrendedPowerData
     WWSB_trend  :: Vector{Float64}  # 14 
 end
 
-function detrend_scaled_by_installed_power(power_data, installed_power)
-    IP_Woff  = installed_power.Woff  ./ mean(installed_power.Woff)
-    IP_Won   = installed_power.Won   ./ mean(installed_power.Won)
-    IP_Solar = installed_power.Solar ./ mean(installed_power.Solar)
-    IP_Bio   = installed_power.Bio   ./ mean(installed_power.Bio)
-
-    Woff_ip  = @. power_data.Woff  / IP_Woff
-    Won_ip   = @. power_data.Won   / IP_Won
-    Solar_ip = @. power_data.Solar / IP_Solar
-    Bio_ip   = @. power_data.Bio   / IP_Bio
-
-    s1 = mean(power_data.Woff) / mean(Woff_ip)
-    s2 = mean(power_data.Won)  / mean(Won_ip)
-    s3 = mean(power_data.Solar)/ mean(Solar_ip)
-    s4 = mean(power_data.Bio)  / mean(Bio_ip)
-
-    Woff_de , Woff_trend  = detrend_time_series(Woff_ip  .* s1)
-    Won_de  , Won_trend   = detrend_time_series(Won_ip   .* s2)
-    Solar_de, Solar_trend = detrend_time_series(Solar_ip .* s3)
-    Bio_de  , Bio_trend   = detrend_time_series(Bio_ip   .* s4)
-
-    Woff_de, Woff_trend, Won_de, Won_trend, Solar_de, Solar_trend, Bio_de, Bio_trend 
+function DetrendedPowerData(df)
+    DetrendedPowerData(
+        df[!,:dates],
+        df[!,:uts],
+        df[!,:Load],
+        df[!,:Woff],
+        df[!,:Won],
+        df[!,:Solar],
+        df[!,:Bio],
+        df[!,:WWSBPower],
+        df[!,:Load_trend],
+        df[!,:Woff_trend],
+        df[!,:Won_trend],
+        df[!,:Solar_trend],
+        df[!,:Bio_trend],
+        df[!,:Bio_trend])
 end
 
-function detrend_renewables(power_data)
-    Woff_de , Woff_trend  = detrend_time_series(power_data.Woff)
-    Won_de  , Won_trend   = detrend_time_series(power_data.Won)
-    Solar_de, Solar_trend = detrend_time_series(power_data.Solar)
-    Bio_de  , Bio_trend   = detrend_time_series(power_data.Bio)
-    Woff_de, Woff_trend, Won_de, Won_trend, Solar_de, Solar_trend, Bio_de, Bio_trend 
+function scale_by_installed_power(power_data::DataFrame, installed_power::DataFrame)
+    IP_Woff  = installed_power[!,:Woff ] ./ mean(installed_power[!,:Woff])
+    IP_Won   = installed_power[!,:Won  ] ./ mean(installed_power[!,:Won])
+    IP_Solar = installed_power[!,:Solar] ./ mean(installed_power[!,:Solar])
+    IP_Bio   = installed_power[!,:Bio  ] ./ mean(installed_power[!,:Bio])
+
+    Woff_ip  = @. power_data[!,:Woff ] / IP_Woff
+    Won_ip   = @. power_data[!,:Won  ] / IP_Won
+    Solar_ip = @. power_data[!,:Solar] / IP_Solar
+    Bio_ip   = @. power_data[!,:Bio  ] / IP_Bio
+
+    Woff_ip, Won_ip, Solar_ip, Bio_ip, Woff_trend, Won_trend, Solar_trend, Bio_trend
 end
+
+"""
+    Woff, Won, Solar are scaled such that Woff+Won+Solar+Bio = Load
+    Bio assumed not to increase further
+"""
+function scale_wind_and_solar_to_load!(Load, Woff, Won, Solar, Bio)
+    WWS  = Woff .+ Won .+ Solar
+
+    mean_Load = mean(Load)
+    mean_Bio  = mean(Bio)
+    mean_WWS  = mean(WWS)
+    # mean_L*op = mean_R * scale + mean_B
+    scale = (mean_Load - mean_Bio) / mean_WWS
+
+    Woff  = Woff  .* scale
+    Won   = Won   .* scale
+    Solar = Solar .* scale
+
+    Woff, Won, Solar, scale
+end
+
 
 function get_detrended_power_data(power_data, installed_power, par)
-    Woff_de, Woff_trend, Won_de, Won_trend, Solar_de, Solar_trend, Bio_de, Bio_trend  = if par.scale_with_installed_power_p
-        detrend_scaled_by_installed_power(power_data, installed_power)
-    else
-        detrend_renewables(power_data)
-    end
+    Woff_sc, Won_sc, Solar_sc, Bio_sc, Woff_trend, Won_trend, Solar_trend, Bio_trend  = 
+        scale_by_installed_power(power_data, installed_power)
+
     Load_de, Load_trend  = detrend_time_series(power_data.Load)
 
-    Woff_sc, Won_sc, Solar_sc, scale = scale_wind_and_solar!(Load_de, Woff_de, Won_de, Solar_de, Bio_de)
+    Woff_sc, Won_sc, Solar_sc, scale = scale_wind_and_solar_to_load!(Load_de, Woff_sc, Won_sc, Solar_sc, Bio_sc)
     @info @sprintf("scale_factor = %f", scale)
 
-    WWSB = Won_sc .+ Woff_sc .+ Solar_sc .+ Bio_de
-    WWSB_de, WWSB_trend = detrend_time_series(WWSB)
+    WWSB_sc = Won_sc .+ Woff_sc .+ Solar_sc .+ Bio_de
 
     Load_sum = sum(Load_de)
     WWSB_sum = sum(WWSB_de)
     @info @sprintf("Load_sum = %10.4e, WWSB_sum = %10.4e, sum_L-sum_P = %10.4e", Load_sum, WWSB_sum, Load_sum-WWSB_sum)
 
     DataFrame([:dates, :uts, :Load, :Woff, :Won, :Solar, :Bio, :WWSBPower,
-                :Load_trend, :Woff_trend, :Won_trend, :Solar_trend, :Bio_trend, :WWSB_trend] 
+                :Load_trend, :Woff_trend, :Won_trend, :Solar_trend, :Bio_trend] 
                 .=> 
-                [power_data[!,:dates], power_data[!,:uts], Load_de, Woff_de, Won_de, Solar_de, Bio_de, WWSB_de,
-                Load_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend, WWSB_trend]
+                [power_data[!,:dates], power_data[!,:uts], Load_de, Woff_sc, Won_sc, Solar_sc, Bio_sc, WWSB_sc,
+                Load_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend]
     )
 end
 

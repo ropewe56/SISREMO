@@ -197,27 +197,6 @@ function InstalledPowerData(df)
         df[!,:BatPow])
 end
 
-"""
-    Woff, Won, Solar are scaled such that Woff+Won+Solar+Bio = Load
-    Bio assumed not to increase further
-"""
-function scale_wind_and_solar_to_load!(Load, Woff, Won, Solar, Bio)
-    WWS  = Woff .+ Won .+ Solar
-
-    mean_Load = mean(Load)
-    mean_Bio  = mean(Bio)
-    mean_WWS  = mean(WWS)
-    # mean_L*op = mean_R * scale + mean_B
-    scale = (mean_Load - mean_Bio) / mean_WWS
-
-    Woff  = Woff  .* scale
-    Won   = Won   .* scale
-    Solar = Solar .* scale
-
-    Woff, Won, Solar, scale
-end
-
-
 struct AveragedPowerData
     dates    :: Vector{DateTime} # 1
     uts      :: Vector{Int64}    # 2
