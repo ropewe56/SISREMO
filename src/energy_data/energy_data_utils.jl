@@ -119,10 +119,12 @@ function detrend_EE(Load, EE, Load_avme, Load_avmo, EE_avme, EE_avmo, dates_avme
     pl.title("diff detrended")
     pl.savefig(joinpath(fig_dir, "EE_diff_detrended.png"))
 
-    # scaled detrnde 2'nd order fit
+    # scaled detrended 2'nd order fit
     EE_avma_scaled_de2
 end
 
+"""
+"""
 function detrend_time_series(A; pol_order=2)
     A_trend = polynomial_fit(A, pol_order)
 

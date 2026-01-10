@@ -70,9 +70,15 @@ par = make_parameter(2016, 2025)
 
 storage_capacities, over_production = storage_and_overproduction(par)
 
-power_data = PowerData(par);
+date1 = DateTime("2017-01-01")
+date2 = DateTime("2025-12-31")
 
-detrended_and_scaled_data = renewables_detrend_and_scale(par, power_data);
+power_data = get_public_power_data(date1, date2, par)
+installed_data = get_installed_power_data(power_data, par)
+
+get_detrended_power_data(power_data, installed_power, par)
+
+detrended_and_scaled_data = get_detrended_power_data(power_data, installed_power, par)(par, power_data);
 dbname = joinpath(par.sisremo_root, "detrended_and_scaled_data.db")
 save_detrended_power_data_to_db(detrended_and_scaled_data, dbname)
 load_detrended_power_data_from_db(dbname);

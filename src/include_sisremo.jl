@@ -8,7 +8,7 @@ using Printf
 using JSON3
 using SQLite
 using Interpolations
-using Statistic
+using Statistics
 using Arrow
 
 using PhysConst.UnitConst

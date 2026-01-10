@@ -8,7 +8,7 @@ function hours_to_averaging_steps(dates, averaging_hours)
     ms = Dates.value(dates[2] - dates[1])
     # time difference in hours
     Δh = ms/(3.6e6)
-    c = floor(Int64, 1.0/Δh)
+    c = 1.0/Δh
     steps = averaging_hours * c
     steps, dates[1:steps:end]
 end
@@ -84,6 +84,9 @@ function moving_average_(y::Vector{Float64}, iw::Int64)
     ma
 end
 
+"""
+Load, dates = power_data.Load, power_data.dates
+"""
 function moving_average(data, dates, averaging_hours)
     averaging_steps, avdates = hours_to_averaging_steps(dates, averaging_hours)
     avdata = moving_average_(data, averaging_steps)
@@ -94,9 +97,10 @@ function averaging(data, dates, averaging_hours; method = :moving_average)
     avdata, avdates = if method == :moving_average
         moving_average(data, dates, averaging_hours)
     elseif method == :mean
-        mean_averaging(data, dates, averaging_hours)
+        mean_average(data, dates, averaging_hours)
     else
-        @info @sprintf("method %s not vaialable", method)
+        @info "no method $method. posseible methods: :moving_average, :mean"
+        return nothing, nothing
     end
 
     if length(avdata) == length(avdates)
