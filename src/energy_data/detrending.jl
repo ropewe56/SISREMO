@@ -15,7 +15,6 @@ struct DetrendedPowerData
     WWSB_trend  :: Vector{Float64}  # 14 
 end
 
-
 function detrend_scaled_by_installed_power(power_data, installed_power)
     IP_Woff  = installed_power.Woff  ./ mean(installed_power.Woff)
     IP_Won   = installed_power.Won   ./ mean(installed_power.Won)
@@ -66,36 +65,11 @@ function get_detrended_power_data(power_data, installed_power, par)
     WWSB_sum = sum(WWSB_de)
     @info @sprintf("Load_sum = %10.4e, WWSB_sum = %10.4e, sum_L-sum_P = %10.4e", Load_sum, WWSB_sum, Load_sum-WWSB_sum)
 
-    DataFrame([
-        :dates       ,
-        :uts         ,
-        :Load        ,
-        :Woff        ,
-        :Won         ,
-        :Solar       ,
-        :Bio         ,
-        :WWSBPower   ,
-        :Load_trend  ,
-        :Woff_trend  ,
-        :Won_trend   ,
-        :Solar_trend ,
-        :Bio_trend   ,
-        :WWSB_trend  ] .=> 
-
-        [dates       ,
-        uts         ,
-        Load        ,
-        Woff        ,
-        Won         ,
-        Solar       ,
-        Bio         ,
-        WWSBPower   ,
-        Load_trend  ,
-        Woff_trend  ,
-        Won_trend   ,
-        Solar_trend ,
-        Bio_trend   ,
-        WWSB_trend  ]
+    DataFrame([:dates, :uts, :Load, :Woff, :Won, :Solar, :Bio, :WWSBPower,
+                :Load_trend, :Woff_trend, :Won_trend, :Solar_trend, :Bio_trend, :WWSB_trend] 
+                .=> 
+                [power_data[!,:dates], power_data[!,:uts], Load_de, Woff_de, Won_de, Solar_de, Bio_de, WWSB_de,
+                Load_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend, WWSB_trend]
     )
 end
 

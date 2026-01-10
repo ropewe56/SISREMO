@@ -74,7 +74,7 @@ date1 = DateTime("2017-01-01")
 date2 = DateTime("2025-12-31")
 
 power_data = get_public_power_data(date1, date2, par)
-installed_data = get_installed_power_data(power_data, par)
+installed_power = get_installed_power_data(power_data, par)
 
 get_detrended_power_data(power_data, installed_power, par)
 
