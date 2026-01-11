@@ -5,6 +5,7 @@ include("select_from_db.jl")
 include("energy_data_utils.jl")
 include("averaging.jl")
 include("power_data.jl")
+include("detrending.jl")
 
 
 

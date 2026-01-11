@@ -44,7 +44,7 @@ function plot_powers(dates::Vector{DateTime}, Load_ec::Vector{Float64}, Load::Ve
     end
 end
 
-function plot_detrended(dates::Vector{DateTime}, WWSB::Vector{Float64}, WWSB_de::Vector{Float64}, WWSB_trend::Vector{Float64}, 
+function plot_detrended(dates::Vector{DateTime}, WWSB::Vector{Float64}, WWSB_de::Vector{Float64}, 
                         ΔEL::Vector{Float64},
                         Load::Vector{Float64}, Load_de::Vector{Float64}, Load_trend::Vector{Float64},
                         punit, fig_dir::String, fig::Vector{Int64}; data_are_averaged = false)
@@ -87,7 +87,6 @@ function plot_detrended(dates::Vector{DateTime}, WWSB::Vector{Float64}, WWSB_de:
     pl.figure(fig[1]); fig[1] += 1
     pl.plot(dates, WWSB      , label = label1)
     pl.plot(dates, WWSB_de   , label = label2)
-    pl.plot(dates, WWSB_trend,  "r", linewidth=3, label = "WWSB_trend")
     pl.xlabel("time")
     pl.ylabel(@sprintf("P [%s]", punit))
     pl.grid()

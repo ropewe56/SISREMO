@@ -1,11 +1,11 @@
-import 
+include("../include_sisremo.jl")
 
-import PyPlot as pl
-pl.pygui(true)
-pl.pygui(:qt5)
+import PyPlot as plt
+plt.pygui(true)
+plt.pygui(:qt5)
 
-include("power_parameter.jl")
-include("storage_requirements_functions_v2.jl")
+include("plot_results.jl")
+include("storage_requirements_functions.jl")
 
 #"python.terminal.activateEnvironment": false
 
@@ -54,18 +54,6 @@ function storage_and_overproduction(par)
     storage_capacities, over_production
 end
 
-function get_paths()
-    # project root directory
-    sisremo_dir = dirname(@__DIR__)
-    hdf5_dir = joinpath(sisremo_dir, "data")
-    json_dir = joinpath(hdf5_dir, "json_downloads")
-
-    mkpath(hdf5_dir)
-    mkpath(json_dir)
-    json_dir, hdf5_dir
-end
-json_dir, hdf5_dir = get_paths()
-
 par = make_parameter(2016, 2025)
 
 storage_capacities, over_production = storage_and_overproduction(par)
@@ -77,8 +65,12 @@ power_data = get_public_power_data(date1, date2, par)
 installed_power = get_installed_power_data(power_data, par)
 
 detrended_and_scaled_data = get_detrended_power_data(power_data, installed_power, par)
-arrow_path = joinpath(par.sisremo_root, "detrended_and_scaled_data.arrow")
+arrow_path = joinpath(DATAROOT, "detrended_and_scaled_data.arrow")
 save_to_arrow(detrended_and_scaled_data, arrow_path)
+
+#plt.plot(power_data[!,:Load])
+#plt.plot(detrended_and_scaled_data[!,:Load])
+#plt.plot(detrended_and_scaled_data[!,:Load_trend])
 
 compute_and_plot(par, PowerData(power_data), DetrendedPowerData(detrended_and_scaled_data), storage_capacities, over_production)
 

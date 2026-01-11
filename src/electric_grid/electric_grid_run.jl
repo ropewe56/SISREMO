@@ -1,13 +1,11 @@
 import JLD
 using Printf
 using NLopt
-#using Optim
 
 import PyPlot as plt
 plt.pygui(true)
 
-include("../energy_data_sql/sqlite_functions.jl")
-include("../energy_data/detrended_data.jl")
+include("../include_sisremo.jl")
 
 #using Optimization
 #using Optimization, OptimizationOptimJL
@@ -430,13 +428,13 @@ function compute(x, power_data, nhours, p::EnergyParameter{T}) where T
 end
 
 T = Float64
-dbname = joinpath(par.sisremo_root, "detrended_and_scaled_data.db")
-power_data = load_detrended_power_data_from_db(dbname);
-nhours = length(power_data.dates)
+arrowpath = joinpath(DATAROOT, "detrended_and_scaled_data.arrow")
+power_data = load_from_arrow(arrowpath);
+nhours = length(power_data[!,:dates])
 p = EnergyParameter{Float64}();
 
 x = [1.0e3, 1.5e4, 1.3]
-sr = compute(x, power_data, nhours, p);
+sr = compute(x, DetrendedPowerData(power_data), nhours, p);
 abs(get_cent_kWh(sr))
 
 print_results(sr)

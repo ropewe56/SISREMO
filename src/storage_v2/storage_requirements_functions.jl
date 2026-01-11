@@ -1,20 +1,3 @@
-using 
-using Statistics
-using Interpolations
-using Printf
-
-import PyPlot as pl
-pl.pygui(true)
-pl.pygui(:qt5)
-
-include("utils.jl")
-include("../energy_data_sql/sqlite_functions.jl")
-include("../energy_data_sql/energy_data.jl")
-include("../energy_data/averadged_data.jl")
-include("../energy_data/detrended_data.jl")
-
-include("plot_results_v2.jl")
-
 """
     get the elapsed time of 1 step
     Dates.value(DateTime) => ms since 1 AD
@@ -304,7 +287,7 @@ function compute_and_plot(par, power_data, power_data_de, storage_capacities, ov
         
         plot_powers(dates, Load, Load_de, power_data.WWSBPower, WWSB_de, 0, par.fig_dir, par.punit, fig)
 
-        plot_detrended(dates, power_data.WWSBPower, WWSB_de, power_data_de.WWSB_trend, ΔEL, 
+        plot_detrended(dates, power_data.WWSBPower, WWSB_de, ΔEL, 
             Load, Load_de, power_data_de.Load_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
         
         plot_cumulative_power(dates, WWSB_de, Load_de, over_production, par.punit, par.fig_dir, fig)
