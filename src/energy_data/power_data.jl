@@ -40,18 +40,6 @@ Base.@kwdef mutable struct PowerParameter
     end_year                     = 2025
 end
 
-struct PowerData
-    dates     :: Vector{DateTime} # 1
-    uts       :: Vector{Int64}    # 2
-    Load      :: Vector{Float64}  # 3
-    Woff      :: Vector{Float64}  # 4
-    Won       :: Vector{Float64}  # 5
-    Solar     :: Vector{Float64}  # 6
-    Bio       :: Vector{Float64}  # 7
-    Nuclear   :: Vector{Float64}  # 8
-    WWSBPower :: Vector{Float64}  # 8
-end
-
 """
     EnergyData(eunit)
 
@@ -80,32 +68,6 @@ function get_public_public_power(date1, date2, par)
     df[!,:WWSBPower] = df[!,:Woff] .+ df[!,:Won] .+ df[!,:Solar] .+ df[!,:Bio]
 
     df
-end
-
-function PowerData(df)
-    PowerData(
-        df[!,:dates    ],
-        df[!,:uts      ],
-        df[!,:Load     ],
-        df[!,:Woff     ],
-        df[!,:Won      ],
-        df[!,:Solar    ],
-        df[!,:Bio      ],
-        df[!,:Nuclear  ],
-        df[!,:WWSBPower])
-end
-
-struct InstalledPowerData
-    dates   :: Vector{DateTime} # 1
-    uts     :: Vector{Int64}    # 2
-    Woff    :: Vector{Float64}  # 3
-    Won     :: Vector{Float64}  # 4
-    Solar   :: Vector{Float64}  # 5
-    Bio     :: Vector{Float64}  # 6
-    Nuclear :: Vector{Float64}  # 6
-    WWSBPower:: Vector{Float64}  # 6
-    BatCap  :: Vector{Float64}  # 7
-    BatPow  :: Vector{Float64}  # 8start_year
 end
 
 """
@@ -144,42 +106,17 @@ function get_installed_public_power(public_power, par)
     dfip = iterpolate_installed_power_2(installed_power_y, public_power.uts)
 
     GW_to_unit = uconversion_factor(u_GW, 1.0*par.punit)
-    dfip[!,:Woff]      = dfip[!,:Woff]      .* (par.Woff_scale  * GW_to_unit)
-    dfip[!,:Won]       = dfip[!,:Won]       .* (par.Won_scale   * GW_to_unit)
-    dfip[!,:Solar]     = dfip[!,:Solar]     .* (par.Solar_scale * GW_to_unit)
-    dfip[!,:Bio]       = dfip[!,:Bio]       .* (par.Bio_scale   * GW_to_unit)
-    dfip[!,:Nuclear]   = dfip[!,:Nuclear]   .* GW_to_unit
-    dfip[!,:WWSBPower] = dfip[!,:WWSBPower] .* GW_to_unit
-    dfip[!,:BatCap]    = dfip[!,:BatCap]    .* GW_to_unit
-    dfip[!,:BatPow]    = dfip[!,:BatPow]    .* GW_to_unit
+
+    dfip.Woff      = dfip.Woff      .* (par.Woff_scale  * GW_to_unit)
+    dfip.Won       = dfip.Won       .* (par.Won_scale   * GW_to_unit)
+    dfip.Solar     = dfip.Solar     .* (par.Solar_scale * GW_to_unit)
+    dfip.Bio       = dfip.Bio       .* (par.Bio_scale   * GW_to_unit)
+    dfip.Nuclear   = dfip.Nuclear   .* GW_to_unit
+    dfip.WWSBPower = dfip.WWSBPower .* GW_to_unit
+    dfip.BatCap    = dfip.BatCap    .* GW_to_unit
+    dfip.BatPow    = dfip.BatPow    .* GW_to_unit
 
     dfip
-end
-
-function InstalledPowerData(df)
-    InstalledPowerData(
-        df[!,:dates ],
-        df[!,:uts   ],
-        df[!,:Woff  ],
-        df[!,:Won   ],
-        df[!,:Solar ],
-        df[!,:Bio   ],
-        df[!,:Nuclear],
-        df[!,:WWSBPower],
-        df[!,:BatCap],
-        df[!,:BatPow])
-end
-
-struct AveragedPowerData
-    dates    :: Vector{DateTime} # 1
-    uts      :: Vector{Int64}    # 2
-    Load     :: Vector{Float64}  # 3
-    Woff     :: Vector{Float64}  # 4
-    Won      :: Vector{Float64}  # 5
-    Solar    :: Vector{Float64}  # 6
-    Bio      :: Vector{Float64}  # 7
-    Nuclear  :: Vector{Float64}  # 8
-    WWSBPower:: Vector{Float64}  # 9 # sum of Woff Won Solar Bio
 end
 
 function get_averaged_public_power(public_power, averaging_hours, averaging_method)
@@ -198,15 +135,3 @@ function get_averaged_public_power(public_power, averaging_hours, averaging_meth
                 [dates_av, uts_av, Load, Woff, Won, Solar, Bio, Nuclear, WWSBPower])
 end
 
-function AveragedPowerData(df)
-    AveragedPowerData(
-        df[!,:dates    ],
-        df[!,:uts      ],
-        df[!,:Load     ],
-        df[!,:Woff     ],
-        df[!,:Won      ],
-        df[!,:Solar    ],
-        df[!,:Bio      ],
-        df[!,:Nuclear  ],
-        df[!,:WWSBPower])
-end

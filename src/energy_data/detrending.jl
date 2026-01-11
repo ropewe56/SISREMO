@@ -95,6 +95,11 @@ function get_detrended_public_power(public_power, installed_power, par)
     Load_trend  = polynomial_fit(uts, public_power.Load; degree=2)(uts)
     Load_de = detrend_time_series(public_power.Load, Load_trend)
 
+    s1 = mean(public_power.Woff) / mean(Woff)
+    s2 = mean(public_power.Won)  / mean(Won)
+    s3 = mean(public_power.Solar)/ mean(Solar)
+    s4 = mean(public_power.Bio)  / mean(Bio)
+
     Woff_trend  = polynomial_fit(uts, Woff  .* s1; degree=2)(uts)
     Won_trend   = polynomial_fit(uts, Won   .* s2; degree=2)(uts)
     Solar_trend = polynomial_fit(uts, Solar .* s3; degree=2)(uts)
@@ -126,6 +131,7 @@ function get_detrended_public_power(public_power, installed_power, par)
         :Won,
         :Solar,
         :Bio,
+        :Nuclear,
         :WWSBPower,
         :Load_trend  ,
         :Woff_trend  ,
@@ -141,6 +147,7 @@ function get_detrended_public_power(public_power, installed_power, par)
         Won_sc,
         Solar_sc,
         Bio_de,
+        public_power.Nuclear,
         WWSB_de,
         Load_trend  ,
         Woff_trend  ,
