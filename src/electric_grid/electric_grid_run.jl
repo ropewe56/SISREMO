@@ -18,8 +18,8 @@ include("../include_sisremo.jl")
 #include("logger.jl")
 include("electric_grid.jl")
 
-#power_data, ppar = get_power_data();
-#save_detrended_power_data(power_data, "save_detrended_power_data.hdf5")
+#public_power, ppar = get_public_power();
+#save_detrended_public_power(public_power, "save_detrended_public_power.hdf5")
 
 const _TWh = 1.0e3
 
@@ -288,7 +288,7 @@ function plot_all(sr::SimulationResult)
     plt.plot(sr.dates,  sr.Imp.ΔE, label="E_Imp")
     plt.plot(sr.dates, -sr.Exp.ΔE, label="E_Exp")
     plt.legend()
-    sr = compute(x, power_data, nhours, p);
+    sr = compute(x, public_power, nhours, p);
     abs(get_cent_kWh(sr))
     
 
@@ -368,14 +368,14 @@ Base.@kwdef mutable struct EnergyParameter{T}
     dnorm        :: T = 1.0e-4
 end
 
-function create_heatmap(power_data, nhours, p, bcap::T, hcap::T, op::T) where T
+function create_heatmap(public_power, nhours, p, bcap::T, hcap::T, op::T) where T
     cost = Matrix{T}(undef, length(bcap), length(hcap))
     for (i,bc) in enumerate(bcap)
         for (j,hc) in enumerate(hcap)
             p.Bat_Einit = bc
             p.H2_Einit = hc
             x = [bc, hc, op]
-            cost[i,j] = compute(x, power_data, nhours, p)
+            cost[i,j] = compute(x, public_power, nhours, p)
             @printf("%d, %d, %f, %f, %e\n", i, j, bc, hc, cost[i,j])
         end
         #@printf("%d, %d, %14.8e\n", i, 100, cost[i,100])
@@ -384,7 +384,7 @@ function create_heatmap(power_data, nhours, p, bcap::T, hcap::T, op::T) where T
     cost
 end
 
-function compute(x, power_data, nhours, p::EnergyParameter{T}) where T
+function compute(x, public_power, nhours, p::EnergyParameter{T}) where T
     t1 = time_ns()
 
     bcap, hcap, op = x[1], x[2], x[3]
@@ -396,12 +396,12 @@ function compute(x, power_data, nhours, p::EnergyParameter{T}) where T
         p.H2O_Einit = hcap*0.5
     end
     
-    load = Load(copy(power_data.Load));
+    load = Load(copy(public_power.Load));
 
-    years = Dates.value(power_data.dates[end] - power_data.dates[1])/(3600*1.0e3)/(365.0*24.0)
+    years = Dates.value(public_power.dates[end] - public_power.dates[1])/(3600*1.0e3)/(365.0*24.0)
 
     #price_of_MWh = (one(T) + (op-one(T)) * p.prod_cost_factor) * p.prod_CostGWh
-    Eprod0 = power_data.WWSBPower .* op
+    Eprod0 = public_power.WWSBPower .* op
     prod  = Production(copy(Eprod0), p.Pro_CMWh);
 
     #ΔP = @. prod0 - load.Et# + (p.H2O_Pout + p.Exp_Pout)
@@ -421,7 +421,7 @@ function compute(x, power_data, nhours, p::EnergyParameter{T}) where T
     t2 = time_ns()
     run_system(load, prod, bat, H2, impp, expp, curt, res, Δt)
     t3 = time_ns()
-    sr = SimulationResult(power_data.dates, power_data.Load, Eprod0, load, prod, bat, H2, impp, expp, curt, res)
+    sr = SimulationResult(public_power.dates, public_power.Load, Eprod0, load, prod, bat, H2, impp, expp, curt, res)
     t4 = time_ns()
     
     sr
@@ -429,12 +429,12 @@ end
 
 T = Float64
 arrowpath = joinpath(DATAROOT, "detrended_and_scaled_data.arrow")
-power_data = load_from_arrow(arrowpath);
-nhours = length(power_data[!,:dates])
+public_power = load_from_arrow(arrowpath);
+nhours = length(public_power[!,:dates])
 p = EnergyParameter{Float64}();
 
 x = [1.0e3, 1.5e4, 1.3]
-sr = compute(x, DetrendedPowerData(power_data), nhours, p);
+sr = compute(x, DetrendedPowerData(public_power), nhours, p);
 abs(get_cent_kWh(sr))
 
 print_results(sr)

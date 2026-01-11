@@ -2,19 +2,14 @@ using CurveFit
 using Dates
 
 """
-    polynomial_fit(y, k)
+    polynomial_fit(x, y, degree)
     y : data to fit
-    k : order of polynomial
+    y : data to fit
+    degree : degree of polynomial
 """
-function polynomial_fit(y, k)
-    N = length(y)
-    x = collect(range(0.0, Float64(N), N))
-    p = poly_fit(x, y, k)
-    yf = p[1]
-    for i in 1:k
-        yf = yf .+ p[i+1] .* x.^i
-    end
-    yf
+function polynomial_fit(x, y; degree = 2)
+    prob = CurveFitProblem(x, y)
+    solve(prob, PolynomialFitAlgorithm(degree=degree))
 end
 
 function spline_approximation(y)
@@ -161,7 +156,7 @@ function scale_power(Load, Woff, Won, Solar, Bio)
     Woff_sc, Won_sc, Solar_sc, WWSB_sc, scale
 end
 
-function renewables_detrend_and_scale(par, power_data)
+function renewables_detrend_and_scale(par, public_power)
     local Woff_de 
     local Won_de  
     local Solar_de
@@ -174,34 +169,34 @@ function renewables_detrend_and_scale(par, power_data)
     local Load_trend 
     
     if par.scale_with_installed_power_p
-        IP = InstalledPowerData(par, power_data)
+        IP = InstalledPowerData(par, public_power)
 
         IP_Woff  = @. IP.Woff  / mean(IP.Woff)
         IP_Won   = @. IP.Won   / mean(IP.Won)
         IP_Solar = @. IP.Solar / mean(IP.Solar)
         IP_Bio   = @. IP.Bio   / mean(IP.Bio)
 
-        Woff_ip  = @. power_data.Woff  / IP_Woff
-        Won_ip   = @. power_data.Won   / IP_Won
-        Solar_ip = @. power_data.Solar / IP_Solar
-        Bio_ip   = @. power_data.Bio   / IP_Bio
+        Woff_ip  = @. public_power.Woff  / IP_Woff
+        Won_ip   = @. public_power.Won   / IP_Won
+        Solar_ip = @. public_power.Solar / IP_Solar
+        Bio_ip   = @. public_power.Bio   / IP_Bio
 
-        s1 = mean(power_data.Woff) / mean(Woff_ip)
-        s2 = mean(power_data.Won)  / mean(Won_ip)
-        s3 = mean(power_data.Solar)/ mean(Solar_ip)
-        s4 = mean(power_data.Bio)  / mean(Bio_ip)
+        s1 = mean(public_power.Woff) / mean(Woff_ip)
+        s2 = mean(public_power.Won)  / mean(Won_ip)
+        s3 = mean(public_power.Solar)/ mean(Solar_ip)
+        s4 = mean(public_power.Bio)  / mean(Bio_ip)
 
         Woff_de , Woff_trend  = detrend_time_series(Woff_ip  .* s1)
         Won_de  , Won_trend   = detrend_time_series(Won_ip   .* s2)
         Solar_de, Solar_trend = detrend_time_series(Solar_ip .* s3)
         Bio_de  , Bio_trend   = detrend_time_series(Bio_ip   .* s4)
-        Load_de , Load_trend  = detrend_time_series(power_data.Load)
+        Load_de , Load_trend  = detrend_time_series(public_power.Load)
     else
-        Woff_de , Woff_trend  = detrend_time_series(power_data.Woff)
-        Won_de  , Won_trend   = detrend_time_series(power_data.Won)
-        Solar_de, Solar_trend = detrend_time_series(power_data.Solar)
-        Bio_de  , Bio_trend   = detrend_time_series(power_data.Bio)
-        Load_de , Load_trend  = detrend_time_series(power_data.Load)
+        Woff_de , Woff_trend  = detrend_time_series(public_power.Woff)
+        Won_de  , Won_trend   = detrend_time_series(public_power.Won)
+        Solar_de, Solar_trend = detrend_time_series(public_power.Solar)
+        Bio_de  , Bio_trend   = detrend_time_series(public_power.Bio)
+        Load_de , Load_trend  = detrend_time_series(public_power.Load)
     end
 
     Woff_sc, Won_sc, Solar_sc, WWSB_sc, sc = scale_power(Load_de, Woff_de, Won_de, Solar_de, Bio_de)
@@ -213,7 +208,7 @@ function renewables_detrend_and_scale(par, power_data)
     WWSB_sum = sum(WWSB_sc)
     @info @sprintf("Load_sum = %10.4e, WWSB_sum = %10.4e, sum_L-sum_P = %10.4e", Load_sum, WWSB_sum, Load_sum-WWSB_sum)
 
-    powers_de = DetrendedPowerData(power_data.dates, power_data.uts, 
+    powers_de = DetrendedPowerData(public_power.dates, public_power.uts, 
                     Load_de, Woff_sc, Won_sc, Solar_sc, Bio_de, WWSB_de, 
                     Load_trend, Woff_trend, Won_trend, Solar_trend, Bio_trend, WWSB_trend)
     powers_de

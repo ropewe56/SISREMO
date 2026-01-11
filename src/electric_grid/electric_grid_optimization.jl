@@ -3,7 +3,7 @@ function run()
     hcap = collect(range(1.0e3, 5.0e4, 3))
     op = 1.4
 
-    cost = create_heatmap(power_data, nhours, p, bcap, hcap, op)
+    cost = create_heatmap(public_power, nhours, p, bcap, hcap, op)
 
 
     cost = JLD.load("cost.jld")["cost"]
@@ -26,24 +26,24 @@ function run()
     surf = ax.plot_surface(X, Y, cost0, linewidth=0, antialiased=false)
 
     T = Float64
-    power_data, ppar = get_power_data();
-    #save_detrended_power_data(power_data, "save_detrended_power_data.hdf5")
-    power_data = load_detrended_power_data("save_detrended_power_data.hdf5");
+    public_power, ppar = get_public_power();
+    #save_detrended_public_power(public_power, "save_detrended_public_power.hdf5")
+    public_power = load_detrended_public_power("save_detrended_public_power.hdf5");
 
-    function get_fopt(power_data)
-        nhours = length(power_data.dates)
+    function get_fopt(public_power)
+        nhours = length(public_power.dates)
         p = EnergyParameter{T}()
         function fv1(x)
             p.fcall += 1
-            compute(x, power_data, nhours, p)[1]
+            compute(x, public_power, nhours, p)[1]
         end
         function fv2(x, p)
             p.fcall += 1
-            compute(x, power_data, nhours, p)[1]
+            compute(x, public_power, nhours, p)[1]
         end
         fv1, fv2, p
     end
-    fv1, fv2, p = get_fopt(power_data)
+    fv1, fv2, p = get_fopt(public_power)
 
 
     lb = [T(  10.0), T(2.0e3), T(1.3)]

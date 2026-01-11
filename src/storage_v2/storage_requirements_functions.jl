@@ -254,14 +254,14 @@ end
 
 """
     load data and compute and plot storage fille levels, original times (15 min)
-    compute_and_plot(par, power_data, power_data_de, storage_capacities, over_production)
+    compute_and_plot(par, public_power, public_power_de, storage_capacities, over_production)
 
 """
-function compute_and_plot(par, power_data, power_data_de, storage_capacities, over_production)
+function compute_and_plot(par, public_power, public_power_de, storage_capacities, over_production)
 
-    storages_v, WWSB_scaled = compute_storage_fill_level(power_data_de, storage_capacities, over_production, par.SF1_factor)
+    storages_v, WWSB_scaled = compute_storage_fill_level(public_power_de, storage_capacities, over_production, par.SF1_factor)
     
-    dates = power_data.dates
+    dates = public_power.dates
 
     nb_stg = length(storages_v[1])
     @info "nb_stg =", nb_stg
@@ -279,16 +279,16 @@ function compute_and_plot(par, power_data, power_data_de, storage_capacities, ov
         @info @sprintf("fig_dir = %s", par.fig_dir)
 
         fig      = [1]
-        Load     = power_data.Load
-        Load_de  = power_data_de.Load
-        WWSB_de  = power_data_de.WWSBPower
+        Load     = public_power.Load
+        Load_de  = public_power_de.Load
+        WWSB_de  = public_power_de.WWSBPower
 
         ΔEL = (WWSB_de - Load_de)
         
-        plot_powers(dates, Load, Load_de, power_data.WWSBPower, WWSB_de, 0, par.fig_dir, par.punit, fig)
+        plot_powers(dates, Load, Load_de, public_power.WWSBPower, WWSB_de, 0, par.fig_dir, par.punit, fig)
 
-        plot_detrended(dates, power_data.WWSBPower, WWSB_de, ΔEL, 
-            Load, Load_de, power_data_de.Load_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
+        plot_detrended(dates, public_power.WWSBPower, WWSB_de, ΔEL, 
+            Load, Load_de, public_power_de.Load_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
         
         plot_cumulative_power(dates, WWSB_de, Load_de, over_production, par.punit, par.fig_dir, fig)
 
@@ -305,16 +305,16 @@ end
 """
 function compute_and_plot_averaged(storage_capacities::Vector{Float64}, over_production::Vector{Float64}, par)
 
-    power_data = PowerData(par);
-    power_data_av = get_averaged_power_data(power_data, par.averaging_hours, par.averaging_method)
+    public_power = PowerData(par);
+    public_power_av = get_averaged_public_power(public_power, par.averaging_hours, par.averaging_method)
 
-    power_data_avde = if par.scale_to_installed_power_p
-        renewables_detrend_and_scale(par, power_data_av);
+    public_power_avde = if par.scale_to_installed_power_p
+        renewables_detrend_and_scale(par, public_power_av);
     else
-        detrend_renewables(power_data_av);
+        detrend_renewables(public_power_av);
     end
 
-    storages_v, WWSB_scaled = compute_storage_fill_level(power_data_avde, storage_capacities, over_production, par.SF1_factor)
+    storages_v, WWSB_scaled = compute_storage_fill_level(public_power_avde, storage_capacities, over_production, par.SF1_factor)
     nb_stg = length(storages_v[1])
 
     nb_stg = length(storages_v[1])
@@ -333,18 +333,18 @@ function compute_and_plot_averaged(storage_capacities::Vector{Float64}, over_pro
         @info @sprintf("fig_dir = %s", par.fig_dir)
 
         fig = [1]
-        Load    = power_data_av.Load
-        WWSB    = power_data_av.WWSBPower
-        Load_de = power_data_avde.Load
-        WWSB_de = power_data_avde.WWSBPower
+        Load    = public_power_av.Load
+        WWSB    = public_power_av.WWSBPower
+        Load_de = public_power_avde.Load
+        WWSB_de = public_power_avde.WWSBPower
 
         ΔEL = (WWSB_de - Load_de)
-        dates = power_data_av.dates
+        dates = public_power_av.dates
 
         plot_powers(dates, Load, Load_de, WWSB, WWSB_de, 0, par.fig_dir, par.punit, fig)
 
-        plot_detrended(dates, WWSB, WWSB_de, power_data_avde.WWSB_trend, ΔEL, Load, Load_de, 
-                        power_data_avde.Load_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
+        plot_detrended(dates, WWSB, WWSB_de, public_power_avde.WWSB_trend, ΔEL, Load, Load_de, 
+                        public_power_avde.Load_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
                 
         plot_cumulative_power(dates, WWSB_de, Load_de, over_production, par.punit, par.fig_dir, fig)
     

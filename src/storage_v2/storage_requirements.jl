@@ -61,18 +61,18 @@ storage_capacities, over_production = storage_and_overproduction(par)
 date1 = DateTime("2017-01-01")
 date2 = DateTime("2025-12-31")
 
-power_data = get_public_power_data(date1, date2, par)
-installed_power = get_installed_power_data(power_data, par)
+public_power = get_public_public_power(date1, date2, par)
+installed_power = get_installed_public_power(public_power, par)
 
-detrended_and_scaled_data = get_detrended_power_data(power_data, installed_power, par)
+detrended_and_scaled_data = get_detrended_public_power(public_power, installed_power, par)
 arrow_path = joinpath(DATAROOT, "detrended_and_scaled_data.arrow")
 save_to_arrow(detrended_and_scaled_data, arrow_path)
 
-#plt.plot(power_data[!,:Load])
+#plt.plot(public_power[!,:Load])
 #plt.plot(detrended_and_scaled_data[!,:Load])
 #plt.plot(detrended_and_scaled_data[!,:Load_trend])
 
-compute_and_plot(par, PowerData(power_data), DetrendedPowerData(detrended_and_scaled_data), storage_capacities, over_production)
+compute_and_plot(par, PowerData(public_power), DetrendedPowerData(detrended_and_scaled_data), storage_capacities, over_production)
 
 par.fig_dir = par.fig_dir*"_av4"
 compute_and_plot_averaged(storage_capacities, over_production, par);

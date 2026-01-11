@@ -1,10 +1,10 @@
 """
-    download_ise_power_data(json_dir, year)
+    download_ise_public_power(json_dir, year)
 
     json_dir : directory where to store downloaded json file
     year : power data as json is downloaded for year and saved to power_<year>.json
 """
-function download_ise_power_data(json_dir, year_, get_)
+function download_ise_public_power(json_dir, year_, get_)
     query = [("country" => "de"), ("start", @sprintf("%s-01-01T00:00Z",year_)), ("end", @sprintf("%s-12-31T23:59Z", year_))]
     url   = "https://api.energy-charts.info/"*get_
     
@@ -34,7 +34,7 @@ function download_ise_data(json_dir, start_year, end_year)
     gets = ["public_power", "total_power", "installed_power", "cbpf"]
     for get in gets
         for year in start_year:end_year
-            download_ise_power_data(json_dir, year, get)
+            download_ise_public_power(json_dir, year, get)
         end
     end
 end

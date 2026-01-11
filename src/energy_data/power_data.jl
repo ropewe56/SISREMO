@@ -60,7 +60,7 @@ end
     plt.plot(pp[!,:unix_seconds], pp[!,:Solar])
     plt.plot(uts, average_to_hour(pp[!,:Solar]))
 """
-function get_public_power_data(date1, date2, par)
+function get_public_public_power(date1, date2, par)
     pp = select_from_db(date1, date2, ["public_power"])["public_power"]
 
     # energy charts data are in MW, MW_to_unit is conversion factor to eunit (MW, GW, TW)
@@ -109,78 +109,51 @@ struct InstalledPowerData
 end
 
 """
-    uts_pubpower = power_data.uts
+    uts = public_power.uts
     punit = par.punit
 """
-function iterpolate_installed_power_1(installed_power_y::DataFrame, punit, uts_pubpower)
-    year = installed_power_y[!,:time]
-    uts = [datetime2unix(DateTime(@sprintf("%d-07-01", t))) for t in year]
+function iterpolate_installed_power_2(installed_power::DataFrame, uts)
+    yip = installed_power[!,:time]
+    utsip = datetime2unix.(DateTime.(yip, 1, 1))
 
-    values = Vector{Any}([uts_pubpower])
-    colnames = names(installed_power_y)
-    for k in colnames[2:end]
-        intp = linear_interpolation(uts, installed_power_y[!,k], extrapolation_bc=Line())
-        push!(values, intp(uts_pubpower))
-    end
-    df = DataFrame(colnames .=> values)
-    df
+    dates = unix2datetime.(uts)
+
+    dfip = DataFrame()
+    dfip[!,:dates] = dates
+    dfip[!,:uts]  = uts
+    dfip[!,:Won]  = polynomial_fit(utsip, installed_power[!,:Wind_onshore]; degree = 2)(uts)
+    dfip[!,:Woff] = polynomial_fit(utsip, installed_power[!,:Wind_offshore]; degree = 2)(uts)
+    SAC = polynomial_fit(utsip, installed_power[!,:Solar_AC]; degree = 2)(uts)
+    SDC = polynomial_fit(utsip, installed_power[!,:Solar_DC]; degree = 2)(uts)
+    dfip[!,:Solar] = SAC .+ SDC
+    dfip[!,:Bio]  = polynomial_fit(utsip, installed_power[!,:Biomass]; degree = 2)(uts)
+
+    dfip[!,:Nuclear] = polynomial_fit(utsip, installed_power[!,:Nuclear]; degree = 2)(uts)
+    dfip[!,:WWSBPower] = dfip[!,:Won] .+ dfip[!,:Woff] .+   dfip[!,:Bio] .+ dfip[!,:Solar] 
+
+    dfip[!,:BatCap] = polynomial_fit(utsip, installed_power[!,:Battery_storage_capacity]; degree = 2)(uts)
+    dfip[!,:BatPow] = polynomial_fit(utsip, installed_power[!,:Battery_storage_power]; degree = 2)(uts)
+
+    dfip
 end
 
-"""
-    uts_pubpower = power_data.uts
-    punit = par.punit
-    uts_pubpower = power_data.uts
-"""
-function iterpolate_installed_power_2(installed_power_y::DataFrame, uts_pubpower)
-    yip = installed_power_y[!,:time]
-    colnames = names(installed_power_y)
-    nc = ncol(installed_power_y)
-
-    yp = Dates.year.(unix2datetime.(uts_pubpower))
-
-    dfi = DataFrame(["i", "y"] .=> [1:length(yp), yp])
-
-    values = Vector{Any}(undef, 0)
-    push!(values, uts_pubpower)
-    for i in 2:nc
-        push!(values, zeros(Float64, length(uts_pubpower)))
-    end
-    dfIP = DataFrame(names(installed_power_y) .=> values)
-
-    for (iy, y) in enumerate(yip)
-        ii = filter(row -> row[:y] == y, dfi)[!,:i]
-        if length(ii) > 0
-            u = collect(range(0.0, 1.0, length(ii)))
-            for k in colnames[2:end]       
-                dfIP[ii[1]:ii[end], k] = @. (1.0-u) * installed_power_y[iy,k] + u * installed_power_y[iy+1,k]
-            end
-        end
-    end
-    dfIP
-end
-
-function get_installed_power_data(power_data, par)
+function get_installed_public_power(public_power, par)
     date1, date2 = DateTime("2016-01-01"), now()
     installed_power_y = select_from_db(date1, date2, ["installed_power"])["installed_power"]
 
-    installed_power_h = iterpolate_installed_power_2(installed_power_y, power_data.uts)
+    dfip = iterpolate_installed_power_2(installed_power_y, public_power.uts)
 
     GW_to_unit = uconversion_factor(u_GW, 1.0*par.punit)
-    df = DataFrame()
+    dfip[!,:Woff]      = dfip[!,:Woff]      .* (par.Woff_scale  * GW_to_unit)
+    dfip[!,:Won]       = dfip[!,:Won]       .* (par.Won_scale   * GW_to_unit)
+    dfip[!,:Solar]     = dfip[!,:Solar]     .* (par.Solar_scale * GW_to_unit)
+    dfip[!,:Bio]       = dfip[!,:Bio]       .* (par.Bio_scale   * GW_to_unit)
+    dfip[!,:Nuclear]   = dfip[!,:Nuclear]   .* GW_to_unit
+    dfip[!,:WWSBPower] = dfip[!,:WWSBPower] .* GW_to_unit
+    dfip[!,:BatCap]    = dfip[!,:BatCap]    .* GW_to_unit
+    dfip[!,:BatPow]    = dfip[!,:BatPow]    .* GW_to_unit
 
-    df[!,:uts]    = installed_power_h[!,:time]
-    df[!,:dates]  = unix2datetime.(df[!,:uts])
-
-    df[!,:Woff]      = installed_power_h[!,:Wind_offshore] * par.Woff_scale  * GW_to_unit
-    df[!,:Won]       = installed_power_h[!,:Wind_onshore]  * par.Won_scale   * GW_to_unit
-    df[!,:Solar]     = (installed_power_h[!,:Solar_AC] .+ installed_power_h[!,:Solar_DC]) .* (par.Solar_scale * GW_to_unit)
-    df[!,:Bio]       = installed_power_h[!,:Biomass] * par.Bio_scale   * GW_to_unit
-    df[!,:Nuclear]   = installed_power_h[!,:Nuclear]  * GW_to_unit
-    df[!,:WWSBPower] = df[!,:Woff] .+ df[!,:Won] .+  df[!,:Solar] .+ df[!,:Bio]
-    df[!,:BatCap]    = installed_power_h[!,:Battery_storage_capacity] * GW_to_unit
-    df[!,:BatPow]    = installed_power_h[!,:Battery_storage_power] * GW_to_unit
-
-    df
+    dfip
 end
 
 function InstalledPowerData(df)
@@ -209,14 +182,14 @@ struct AveragedPowerData
     WWSBPower:: Vector{Float64}  # 9 # sum of Woff Won Solar Bio
 end
 
-function get_averaged_power_data(power_data, averaging_hours, averaging_method)
-    Load     , dates_av = averaging(power_data.Load     , power_data.dates, averaging_hours, method = averaging_method)
-    Woff     , dates_av = averaging(power_data.Woff     , power_data.dates, averaging_hours, method = averaging_method)
-    Won      , dates_av = averaging(power_data.Won      , power_data.dates, averaging_hours, method = averaging_method)
-    Solar    , dates_av = averaging(power_data.Solar    , power_data.dates, averaging_hours, method = averaging_method)
-    Bio      , dates_av = averaging(power_data.Bio      , power_data.dates, averaging_hours, method = averaging_method)
-    Nuclear  , dates_av = averaging(power_data.Nuclear  , power_data.dates, averaging_hours, method = averaging_method)
-    WWSBPower, dates_av = averaging(power_data.WWSBPower, power_data.dates, averaging_hours, method = averaging_method)
+function get_averaged_public_power(public_power, averaging_hours, averaging_method)
+    Load     , dates_av = averaging(public_power.Load     , public_power.dates, averaging_hours, method = averaging_method)
+    Woff     , dates_av = averaging(public_power.Woff     , public_power.dates, averaging_hours, method = averaging_method)
+    Won      , dates_av = averaging(public_power.Won      , public_power.dates, averaging_hours, method = averaging_method)
+    Solar    , dates_av = averaging(public_power.Solar    , public_power.dates, averaging_hours, method = averaging_method)
+    Bio      , dates_av = averaging(public_power.Bio      , public_power.dates, averaging_hours, method = averaging_method)
+    Nuclear  , dates_av = averaging(public_power.Nuclear  , public_power.dates, averaging_hours, method = averaging_method)
+    WWSBPower, dates_av = averaging(public_power.WWSBPower, public_power.dates, averaging_hours, method = averaging_method)
 
     
     uts_av = [Dates.datetime2unix(x) for x in dates_av]

@@ -9,7 +9,7 @@ function hours_to_averaging_steps(dates, averaging_hours)
     # time difference in hours
     Δh = ms/(3.6e6)
     c = 1.0/Δh
-    steps = averaging_hours * c
+    steps = floor(Int64, averaging_hours * c)
     steps, dates[1:steps:end]
 end
 
@@ -17,6 +17,7 @@ end
     mean_average(data, dates, averaging_hours)
 
     average data and dates over averaging_hours
+    dates = public_power.dates
 """
 function mean_average(data, dates, averaging_hours)
     averaging_steps, avdates = hours_to_averaging_steps(dates, averaging_hours)
@@ -85,7 +86,7 @@ function moving_average_(y::Vector{Float64}, iw::Int64)
 end
 
 """
-Load, dates = power_data.Load, power_data.dates
+Load, dates = public_power.Load, public_power.dates
 """
 function moving_average(data, dates, averaging_hours)
     averaging_steps, avdates = hours_to_averaging_steps(dates, averaging_hours)

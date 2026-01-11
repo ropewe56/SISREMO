@@ -1,5 +1,5 @@
-function comp(x, power_data, nhours, p)
-    sr = compute(x, power_data, nhours, p);
+function comp(x, public_power, nhours, p)
+    sr = compute(x, public_power, nhours, p);
 
     minEH2O = minimum(sr.H2O.E)
     maxRes = maximum(sr.Res.ΔE)
@@ -16,20 +16,20 @@ function comp(x, power_data, nhours, p)
 end
 
 import FiniteDifferences
-function make_funcs(power_data, nhours, p)print_results(sr)
+function make_funcs(public_power, nhours, p)print_results(sr)
 
 
     fdm = FiniteDifferences.central_fdm(3, 1)
     
     function fn(x, p)
-        sr = compute(x, power_data, nhours, p)
+        sr = compute(x, public_power, nhours, p)
         r = abs(get_cent_kWh(sr))
         @info x, r
         r
     end
 
     function fnd(x)
-        sr = compute(x, power_data, nhours, p)
+        sr = compute(x, public_power, nhours, p)
         r = abs(get_cent_kWh(sr))
         @info x, r
         r
@@ -60,7 +60,7 @@ function make_funcs(power_data, nhours, p)print_results(sr)
     end
 
     function fncons(x, p)
-        sr = compute(x, power_data, nhours, p)
+        sr = compute(x, public_power, nhours, p)
         res[1] = abs(sr.H2O.E[1] - sr.H2O.E[end])
         #res[2] = minimum(sr.H2O.E)
     end
@@ -68,7 +68,7 @@ function make_funcs(power_data, nhours, p)print_results(sr)
     fn, fngrad, fncons
 end
 
-function find_optimum(lb, ub, u0, power_data, nhours, p)
+function find_optimum(lb, ub, u0, public_power, nhours, p)
 
     opt = NLopt.Opt(:GN_AGS, 3)
     #opt = NLopt.Opt(:LN_BOBYQA, 4)
@@ -76,7 +76,7 @@ function find_optimum(lb, ub, u0, power_data, nhours, p)
     NLopt.lower_bounds!(opt, lb)
     NLopt.upper_bounds!(opt, ub)
 
-    objective_fn, constraint_fn1, constraint_fn2, constraint_fn3 = make_funcs(power_data, nhours, p)
+    objective_fn, constraint_fn1, constraint_fn2, constraint_fn3 = make_funcs(public_power, nhours, p)
     #NLopt.inequality_constraint!(opt, constraint_fn1, 1e-8)
     #NLopt.inequality_constraint!(opt, constraint_fn3, 1e-8)
 
@@ -86,7 +86,7 @@ function find_optimum(lb, ub, u0, power_data, nhours, p)
     min_f, min_x, ret = NLopt.optimize(opt, u0)
     num_evals = NLopt.numevals(opt)
 
-    sr = comp(min_x, power_data, nhours, p)
+    sr = comp(min_x, public_power, nhours, p)
 
     @printf("objective value : %6.4f\n", min_f)
     @printf("solution        : %s   \n", min_x)
@@ -98,10 +98,10 @@ end
 
 
 
-min_x, min_f, sr = find_optimum(lb, ub, u0, power_data, nhours, p);
+min_x, min_f, sr = find_optimum(lb, ub, u0, public_power, nhours, p);
 
 x = min_x .+ [0.0, 0.0, 0.2, 0.0]
-sr = compute(x, power_data, nhours, p)
+sr = compute(x, public_power, nhours, p)
 
 #plot_all(sr)
 
@@ -121,7 +121,7 @@ u0 = [((1.0-λ)*lb[i] + λ*ub[i]) for i in 1:1]
 
 function fn(u, p)
     x = [1.0e3, u[1], 1.5]
-    sr = compute(x, power_data, nhours, p)
+    sr = compute(x, public_power, nhours, p)
     r = abs(get_cent_kWh(sr))
     m = minimum(sr.H2O.E)
     @info x, r, m
@@ -141,7 +141,7 @@ function fngrad(G, u, p)
     @info u, G
 end
 
-#fn, fngrad, fncons = make_funcs(power_data, nhours, p);
+#fn, fngrad, fncons = make_funcs(public_power, nhours, p);
 optf = OptimizationFunction(fn, grad=fngrad);#, cons=fncons);
 prob = OptimizationProblem(optf, u0, p, lb = lb, ub = ub)
 sol = solve(prob, Opt(:LD_LBFGS, 1))
@@ -152,7 +152,7 @@ fngrad(G, u0, p)
 plot_results(sr)
 
 x = [1.0e3, 2.0e4, 1.25]
-sr = compute(x, power_data, nhours, p)
+sr = compute(x, public_power, nhours, p)
 r = abs(get_cent_kWh(sr))
 G=zeros(1)
 fngrad(G, [1.25], p)
