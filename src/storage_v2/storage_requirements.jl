@@ -19,8 +19,8 @@ function get_storage_capacities(par, storage_caps)
     storage_capacities = Vector{Vector{Float64}}(undef, 0)
     for sc in storage_caps
         # stc1 < stc2
-        stc1 = @. sc * 0.01
-        stc2 = @. sc
+        stc1 = sc .* 0.01
+        stc2 = sc
         if par.second_storage_p
             push!(storage_capacities, [stc1, stc2])
         else
@@ -47,16 +47,16 @@ function make_parameter(start_year, end_year)
     par
 end
 
-function storage_and_overproduction(par)
+function get_storage_and_overproduction(par)
     factor = uconversion_factor(par.punit, 1u_TW)
-    storage_capacities = [x*factor for x in [14.0, 26.0, 35.0, 45.0, 55.0]]
-    over_production = [1.5, 1.2, 1.15, 1.1, 1.05]
+    storage_capacities = [x*factor for x in [2.0, 3.0, 4.0, 8.0, 10.0]]
+    over_production = [2.0, 4.0, 5.0]
     storage_capacities, over_production
 end
 
 par = make_parameter(2016, 2025)
 
-storage_capacities, over_production = storage_and_overproduction(par)
+storage_capacities, over_production = get_storage_and_overproduction(par)
 
 date1 = DateTime("2017-01-01")
 date2 = DateTime("2025-12-31")
@@ -65,7 +65,6 @@ par = PowerParameter()
 par.scale_with_installed_power_p = true
 
 public_power = get_public_public_power(date1, date2, par)
-plt.plot(public_power.uts, public_power.Won .* public_power.Woff)
 save_to_arrow(public_power, joinpath(DATAROOT, "public_power.arrow"))
 #public_power = load_from_arrow("public_power.arrow")
 #PowerData(public_power)
@@ -83,6 +82,10 @@ averaged_power = get_averaged_public_power(detrended_power, averaging_hours, ave
 save_to_arrow(averaged_power, joinpath(DATAROOT, "averaged_power.arrow"))
 
 
+plt.figure()
+plt.plot(public_power.uts, public_power.Won .* public_power.Woff)
+
+plt.figure()
 plt.plot(public_power.Load)
 plt.plot(detrended_power.Load)
 plt.plot(detrended_power.Load_trend)

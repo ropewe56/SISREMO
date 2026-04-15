@@ -254,12 +254,12 @@ end
 
 """
     load data and compute and plot storage fille levels, original times (15 min)
-    compute_and_plot(par, public_power, public_power_de, storage_capacities, over_production)
+    compute_and_plot(par, public_power, detrended_power, storage_capacities, over_production)
 
 """
-function compute_and_plot(par, public_power, public_power_de, storage_capacities, over_production)
+function compute_and_plot(par, public_power, detrended_power, storage_capacities, over_production)
 
-    storages_v, WWSB_scaled = compute_storage_fill_level(public_power_de, storage_capacities, over_production, par.SF1_factor)
+    storages_v, WWSB_scaled = compute_storage_fill_level(detrended_power, storage_capacities, over_production, par.SF1_factor)
     
     dates = public_power.dates
 
@@ -277,25 +277,31 @@ function compute_and_plot(par, public_power, public_power_de, storage_capacities
 
     if par.plot_p
         @info @sprintf("fig_dir = %s", par.fig_dir)
+        fig_dir = par.fig_dir
+        punit = par.punit 
+        plot_all_p = par.plot_all_p
 
-        fig      = [1]
-        Load     = public_power.Load
-        Load_de  = public_power_de.Load
-        WWSB_de  = public_power_de.WWSBPower
+        fig     = [1]
+        Load_ec = public_power.Load # energy charts,not detrended
+        WWSB_ec = public_power.WWSBPower
+        Load_de = detrended_power.Load
+        WWSB_de = detrended_power.WWSBPower
+
+        Load_trend = detrended_power.Load_trend
 
         ΔEL = (WWSB_de - Load_de)
         
-        plot_powers(dates, Load, Load_de, public_power.WWSBPower, WWSB_de, 0, par.fig_dir, par.punit, fig)
+        plot_powers(dates, Load_ec, Load_de, WWSB_ec, WWSB_de, 0, fig_dir, punit, fig)
 
-        plot_detrended(dates, public_power.WWSBPower, WWSB_de, ΔEL, 
-            Load, Load_de, public_power_de.Load_trend, par.punit, par.fig_dir, fig, data_are_averaged = false)
+        plot_detrended(dates, WWSB_ec, WWSB_de, ΔEL, 
+            Load_ec, Load_de, Load_trend, punit, fig_dir, fig, data_are_averaged = false)
         
-        plot_cumulative_power(dates, WWSB_de, Load_de, over_production, par.punit, par.fig_dir, fig)
+        plot_cumulative_power(dates, WWSB_de, Load_de, over_production, punit, fig_dir, fig)
 
         for j in 1:nb_stg
             @info j, fig
             plot_storage_fill_level(dates, Load_de, WWSB_de, WWSB_scaled, stores[j], 
-                over_production, j, par.fig_dir, fig, par.punit, plot_all_p = par.plot_all_p)
+                over_production, j, fig_dir, fig, punit, plot_all_p = plot_all_p)
         end
     end
 end

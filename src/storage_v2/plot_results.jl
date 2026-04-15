@@ -1,18 +1,19 @@
 """
-    plot_powers(dates, Load, RP, averaging_hours, fig_dir, punit, fig)
+    plot_powers(dates, Load_ec, RP, averaging_hours, fig_dir, punit, fig)
 
     plot Load and RP
 
     dates - times
-    Load -
+    Load_ec - Load energy charts
+    Load - 
     RP   -
     averaging_hours - if data are averaged number of hours to avergae over
     fig_dir - directory where figures are saved to
     punit - (MW, GW, TW)
     fig - number of matplotlib figure
 """
-function plot_powers(dates::Vector{DateTime}, Load_ec::Vector{Float64}, Load::Vector{Float64}, 
-                        WWSB_ec::Vector{Float64}, WWSB::Vector{Float64},
+function plot_powers(dates::Vector{DateTime}, Load_ec::Vector{Float64}, Load_de::Vector{Float64}, 
+                        WWSB_ec::Vector{Float64}, WWSB_de::Vector{Float64},
                         averaging_hours::Int64, fig_dir::String, punit, fig::Vector{Int64})
 
     mkpath(fig_dir)
@@ -27,8 +28,8 @@ function plot_powers(dates::Vector{DateTime}, Load_ec::Vector{Float64}, Load::Ve
     plt.legend()
 
     plt.figure(fig[1]); fig[1] += 1
-    plt.plot(dates, WWSB, label="WWSB")
-    plt.plot(dates, Load, label="Load")
+    plt.plot(dates, WWSB_de, label="WWSB")
+    plt.plot(dates, Load_de, label="Load")
     plt.xlabel("time")
     plt.ylabel(@sprintf("P [%s]", punit))
     plt.grid()
@@ -44,9 +45,9 @@ function plot_powers(dates::Vector{DateTime}, Load_ec::Vector{Float64}, Load::Ve
     end
 end
 
-function plot_detrended(dates::Vector{DateTime}, WWSB::Vector{Float64}, WWSB_de::Vector{Float64}, 
+function plot_detrended(dates::Vector{DateTime}, WWSB_ce::Vector{Float64}, WWSB_de::Vector{Float64}, 
                         ΔEL::Vector{Float64},
-                        Load::Vector{Float64}, Load_de::Vector{Float64}, Load_trend::Vector{Float64},
+                        Load_ce::Vector{Float64}, Load_de::Vector{Float64}, Load_trend::Vector{Float64},
                         punit, fig_dir::String, fig::Vector{Int64}; data_are_averaged = false)
     mkpath(fig_dir)
 
@@ -61,7 +62,7 @@ function plot_detrended(dates::Vector{DateTime}, WWSB::Vector{Float64}, WWSB_de:
     end
 
     plt.figure(fig[1]); fig[1] += 1
-    plt.plot(dates, Load      , label = label1)
+    plt.plot(dates, Load_ce   , label = label1)
     plt.plot(dates, Load_de   , label = label2)
     plt.plot(dates, Load_trend, "r", linewidth=3, label = "Load_trend")
     plt.xlabel("time")
@@ -71,7 +72,7 @@ function plot_detrended(dates::Vector{DateTime}, WWSB::Vector{Float64}, WWSB_de:
     plt.title("Load detrended")
     plt.savefig(joinpath(fig_dir, path1))
 
-    label1 = "WWSB"
+    label1 = "WWSB_ce"
     label2 = "WWSB_de"
     label3 = "WWSB_de - Load"
     path1  = "WWSB_detrended.png"
@@ -85,7 +86,7 @@ function plot_detrended(dates::Vector{DateTime}, WWSB::Vector{Float64}, WWSB_de:
     end
 
     plt.figure(fig[1]); fig[1] += 1
-    plt.plot(dates, WWSB      , label = label1)
+    plt.plot(dates, WWSB_ce   , label = label1)
     plt.plot(dates, WWSB_de   , label = label2)
     plt.xlabel("time")
     plt.ylabel(@sprintf("P [%s]", punit))
