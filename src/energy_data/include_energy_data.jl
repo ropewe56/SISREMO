@@ -1,3 +1,9 @@
+using SQLite
+using DataFrames
+using Dates
+using CurveFit
+using PhysConst.UnitConst
+
 include("create_sql_tables.jl")
 include("download_ise_energy_charts.jl")
 include("insert_energy_data_into_db.jl")

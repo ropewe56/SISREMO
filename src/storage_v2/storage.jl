@@ -1,14 +1,23 @@
+const SISREMOROOT = dirname(dirname(@__DIR__))
+const DATAROOT    = joinpath(SISREMOROOT, "data")
+const FIGDIR      = joinpath(SISREMOROOT, "figures")
+const JSONROOT    = joinpath(DATAROOT, "json")
+const DBPATH      = joinpath(DATAROOT, "ise_data.sqlite")
+
 using Dates
 using Printf
 using Optim
+using DataFrames
+using Arrow
+using Statistics
 
-include("../init_logging.jl")
-include("../energy_data/include_energy_data.jl")
 
 import PyPlot as plt
 plt.pygui(true)
 plt.pygui(:qt5)
 
+include("../init_logging.jl")
+include("../energy_data/include_energy_data.jl")
 
 function write_to_log(k, istep, j, load, scaled_renewables, mode)
     out1 = open(joinpath(@__DIR__, "log1.log"), mode)
@@ -101,6 +110,29 @@ function write_power_step_to_log(stg::Storage, out, i, j)
         i, j, stg.SF[i], P, L, stg.I2[i], stg.I3[i], stg.I4[i], stg.I5[i], stg.I6[i], stg.I7[i]))
 end
 
+function get_detrended_power(par::PowerParameter; load_from_arrow = false)
+    if load_from_arrow
+        return load_from_arrow(joinpath(DATAROOT, "detrended_power.arrow"))
+    end
+    date1 = DateTime(par.start_year, 1, 1)
+    date2 = DateTime(par.end_year, 12, 31)
+
+    public_power = get_public_power(date1, date2, par)
+    save_to_arrow(public_power, joinpath(DATAROOT, "public_power.arrow"))
+    #public_power = load_from_arrow("public_power.arrow")
+    #PowerData(public_power)
+
+    installed_power = get_installed_public_power(public_power, par);
+    save_to_arrow(installed_power, joinpath(DATAROOT, "installed_power.arrow"))
+    #installed_power = load_from_arrow("installed_power.arrow")
+    #InstalledPowerData(installed_power)
+
+    detrended_power = get_detrended_public_power(public_power, installed_power, par)
+    save_to_arrow(detrended_power, joinpath(DATAROOT, "detrended_power.arrow"))
+
+    detrended_power
+end
+
 """
     power_step(stg::Storage, L, P, i)
 
@@ -132,7 +164,7 @@ end
     compute_storage_level(Load, WWSB, torage_capacity)
 """
 function compute_storage_level(Load, WWSB, storage_capacity)
-    nb_steps  = length(scaled_renewables)
+    nb_steps  = length(WWSB)
     storage = Storage(storage_capacity, nb_steps)
     storage.SF[1] = storage_capacity
 
@@ -143,29 +175,35 @@ function compute_storage_level(Load, WWSB, storage_capacity)
     storage
 end
 
+function compute_storage(Load, WWSB, storage_capacitiy, op)
+    mean_load = mean(Load)
+    mean_wwsb = mean(WWSB)
+    scale = (mean_load*op) / mean_wwsb
+    WWSB_scaled =  WWSB .* scale
+    compute_storage_level(Load, WWSB_scaled, storage_capacitiy)
+end
 
 """
     compute storage fill level for different combinations of storage_capacity and over_production
 """
 function optimize_overproduction(Load, WWSB, storage_capacitiy)
-
-    function compute_storage(Load, WWSB, op)
-        mean_load = mean(Load)
-        mean_wwsb = mean(WWSB)
-        scale = (mean_load*op) / mean_wwsb
-        WWSB_scaled =  WWSB .* scale
-        compute_storage_level(Load, WWSB_scaled, storage_capacitiy)
-    end
-
-    function f(op)
-        storage = compute_storage(Load, WWSB, op)
+    
+    function ff(x)
+        storage = compute_storage(Load, WWSB, storage_capacitiy, x[1])
         storage_min = minimum(storage.SF)
-        (storage_min * (1.0 - 0.1))^2 + sum(storage.I7)
+        #@info x[1], (storage_min * (1.0 - 0.1))^2 + sum(storage.I7)
+        storage_min^2 - storage_capacitiy*0.1 + sum(storage.I7)
     end
 
-    op0 = [2.5]
-    results = optimize(f, op0, NelderMead())
-    results.optimizer
+    x0 = [1.5]
+    results = Optim.optimize(ff, x0, NelderMead())
+    
+    op = Optim.minimizer(results)
+    storage = compute_storage(Load, WWSB, storage_capacitiy, op)
+    storage_min = minimum(storage.SF)
+#    @info storage_capacitiy, (storage_min * (1.0 - 0.1))^2 + sum(storage.I7), Optim.minimizer(results), Optim.minimum(results)
+
+    storage_capacitiy, Optim.minimizer(results), Optim.minimum(results)
 end
 
 """
@@ -207,38 +245,27 @@ function make_power_parameter(start_year, end_year)
     par
 end
 
-function get_detrended_power(par::PowerParameter; load_from_arrow = false)
-    if load_from_arrow
-        return load_from_arrow(joinpath(DATAROOT, "detrended_power.arrow"))
-    end
-    date1 = DateTime(par.start_year, 1, 1)
-    date2 = DateTime(par.end_year, 12, 31)
-
-    public_power = get_public_power(date1, date2, par)
-    save_to_arrow(public_power, joinpath(DATAROOT, "public_power.arrow"))
-    #public_power = load_from_arrow("public_power.arrow")
-    #PowerData(public_power)
-
-    installed_power = get_installed_public_power(public_power, par);
-    save_to_arrow(installed_power, joinpath(DATAROOT, "installed_power.arrow"))
-    #installed_power = load_from_arrow("installed_power.arrow")
-    #InstalledPowerData(installed_power)
-
-    detrended_power = get_detrended_public_power(public_power, installed_power, par)
-    save_to_arrow(detrended_power, joinpath(DATAROOT, "detrended_power.arrow"))
-
-    detrended_power
-end
 
 function run_simulation(start_year, end_year)
     par = make_power_parameter(start_year, end_year)
     detrended_power = get_detrended_power(par; load_from_arrow = false)
     
-    storage_capacities = collect(range(2.0, 6.0, 5))
+    storage_capacities = [1.0, 1.5, 2.0, 3.0, 4.0, 5.0] .* uconversion_factor(par.punit, 1u_TW)
 
     Load = detrended_power.Load
     WWSB = @. detrended_power.Woff + detrended_power.Won + detrended_power.Solar + detrended_power.Bio
     determine_overproduction(Load, WWSB, storage_capacities)
+
+    storage = compute_storage(Load, WWSB, storage_capacities[3], 3.0)
+    storage_min = extrema(storage.SF)[1]
+
+    plt.plot(storage.SF)
+   
+    (storage_min * (1.0 - 0.1))^2 + sum(storage.I7)
 end
 
 start_year, end_year = 2017, 2024
+op = 2.0
+st = compute_storage(Load, WWSB, op)
+
+extrema(st.SF)
