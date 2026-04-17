@@ -48,7 +48,7 @@ end
     plt.plot(pp[!,:unix_seconds], pp[!,:Solar])
     plt.plot(uts, average_to_hour(pp[!,:Solar]))
 """
-function get_public_public_power(date1, date2, par)
+function get_public_power(date1, date2, par)
     pp = select_from_db(date1, date2, ["public_power"])["public_power"]
 
     # energy charts data are in MW, MW_to_unit is conversion factor to eunit (MW, GW, TW)
@@ -119,19 +119,16 @@ function get_installed_public_power(public_power, par)
     dfip
 end
 
-function get_averaged_public_power(public_power, averaging_hours, averaging_method)
-    Load     , dates_av = averaging(public_power.Load     , public_power.dates, averaging_hours, method = averaging_method)
-    Woff     , dates_av = averaging(public_power.Woff     , public_power.dates, averaging_hours, method = averaging_method)
-    Won      , dates_av = averaging(public_power.Won      , public_power.dates, averaging_hours, method = averaging_method)
-    Solar    , dates_av = averaging(public_power.Solar    , public_power.dates, averaging_hours, method = averaging_method)
-    Bio      , dates_av = averaging(public_power.Bio      , public_power.dates, averaging_hours, method = averaging_method)
-    Nuclear  , dates_av = averaging(public_power.Nuclear  , public_power.dates, averaging_hours, method = averaging_method)
-    WWSBPower, dates_av = averaging(public_power.WWSBPower, public_power.dates, averaging_hours, method = averaging_method)
+function get_averaged_public_power(detrended_power, averaging_hours, averaging_method)
+    Load     , dates_av = averaging(detrended_power.Load     , detrended_power.dates, averaging_hours, method = averaging_method)
+    Woff     , dates_av = averaging(detrended_power.Woff     , detrended_power.dates, averaging_hours, method = averaging_method)
+    Won      , dates_av = averaging(detrended_power.Won      , detrended_power.dates, averaging_hours, method = averaging_method)
+    Solar    , dates_av = averaging(detrended_power.Solar    , detrended_power.dates, averaging_hours, method = averaging_method)
+    Bio      , dates_av = averaging(detrended_power.Bio      , detrended_power.dates, averaging_hours, method = averaging_method)
+    Nuclear  , dates_av = averaging(detrended_power.Nuclear  , detrended_power.dates, averaging_hours, method = averaging_method)
+    WWSBPower, dates_av = averaging(detrended_power.WWSBPower, detrended_power.dates, averaging_hours, method = averaging_method)
 
-    
-    uts_av = [Dates.datetime2unix(x) for x in dates_av]
-
-    DataFrame([:dates, :uts, :Load, :Woff, :Won, :Solar, :Bio, :Nuclear, :WWSBpower] .=>
-                [dates_av, uts_av, Load, Woff, Won, Solar, Bio, Nuclear, WWSBPower])
+    DataFrame([:dates_av, :Load, :Woff, :Won, :Solar, :Bio, :Nuclear, :WWSBPower] .=>
+                [DateTime.(dates_av), Load, Woff, Won, Solar, Bio, Nuclear, WWSBPower])
 end
 

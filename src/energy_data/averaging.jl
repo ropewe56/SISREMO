@@ -94,6 +94,9 @@ function moving_average(data, dates, averaging_hours)
     avdata, avdates
 end
 
+data = public_power.Load
+dates = public_power.dates
+
 function averaging(data, dates, averaging_hours; method = :moving_average)
     avdata, avdates = if method == :moving_average
         moving_average(data, dates, averaging_hours)
@@ -110,6 +113,7 @@ function averaging(data, dates, averaging_hours; method = :moving_average)
         return avdata, dates
     end
     @warn @sprintf("length of data and dates don't fit.")
+
     return avdata, avdates
 end
 

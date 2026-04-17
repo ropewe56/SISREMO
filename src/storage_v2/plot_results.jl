@@ -105,12 +105,31 @@ function plot_detrended(dates::Vector{DateTime}, WWSB_ce::Vector{Float64}, WWSB_
     plt.savefig(joinpath(fig_dir, path2))
 end
 
-function plot_cumulative_power(dates, WWSB, Load, oprod, punit, fig_dir, fig)
+function plot_averaged(dates_av::Vector{DateTime}, WWSB_av::Vector{Float64}, Load_av::Vector{Float64},
+                        punit, fig_dir::String, fig::Vector{Int64})
+    mkpath(fig_dir)
+
+    ΔEL = @. (WWSB_av - Load_av)
+
+    plt.figure(fig[1]); fig[1] += 1
+    plt.plot(dates_av, WWSB_av, label = "WWSB_av")
+    plt.plot(dates_av, Load_av, label = "Load_av")
+    plt.plot(dates_av, ΔEL, label = "ΔEL")
+    plt.xlabel("time")
+    plt.ylabel(@sprintf("P [%s]", punit))
+    plt.grid()
+    plt.legend()
+    plt.title("Averaged")
+    plt.savefig(joinpath(fig_dir, "WWSB_av_Load_av"))
+
+end
+
+function plot_cumulative_power(dates, WWSB, Load, over_production, punit, fig_dir, fig)
     plt.figure(fig[1]); fig[1] += 1
     cΔEL = cumsum(WWSB .- Load)
     @info 1, cΔEL[end]
     plt.plot(dates, cΔEL, label = "o=1")
-    for op in oprod
+    for op in over_production
         cΔEL = cumsum(WWSB.*op .- Load)
         plt.plot(dates, cΔEL, label = @sprintf("o=%f", op))
         @info op, cΔEL[end]

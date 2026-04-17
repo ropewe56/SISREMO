@@ -12,7 +12,7 @@ tables = ["public_power"]
 par = PowerParameter()
 par.scale_with_installed_power_p = true
 
-public_power = get_public_public_power(date1, date2, par)
+public_power = get_public_power(date1, date2, par)
 save_to_arrow(public_power, joinpath(DATAROOT, "public_power.arrow"))
 #public_power = load_from_arrow("public_power.arrow")
 #PowerData(public_power)
