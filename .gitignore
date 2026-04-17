@@ -3,3 +3,5 @@ SisremoStash/
 *.png
 *.log
 Manifest.toml
+*checkpoints*
+.virtual_documents
