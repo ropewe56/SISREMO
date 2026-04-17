@@ -1,5 +1,41 @@
 using Dates
 using Printf
+using Optim
+
+include("../init_logging.jl")
+include("../energy_data/include_energy_data.jl")
+
+import PyPlot as plt
+plt.pygui(true)
+plt.pygui(:qt5)
+
+
+function write_to_log(k, istep, j, load, scaled_renewables, mode)
+    out1 = open(joinpath(@__DIR__, "log1.log"), mode)
+    out2 = open(joinpath(@__DIR__, "log2.log"), mode)
+
+    write(out1, @sprintf("%3d, %d, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e\n", 
+                istep, k, load, scaled_renewables,
+                storages[j].I2[i],
+                storages[j].I3[i],
+                storages[j].I4[i],
+                storages[j].I5[i],
+                storages[j].I6[i],
+                storages[j].I7[i],
+                storages[j].SF[i],
+                ))
+    write(out2, @sprintf("%3d, %d, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e\n", 
+                istep, k2, storages[j-1].I7[istep], storages[j-1].I5[istep],
+                storages[j].I2[istep],
+                storages[j].I3[istep],
+                storages[j].I4[istep],
+                storages[j].I5[istep],
+                storages[j].I6[istep],
+                storages[j].I7[istep],
+                storages[j].SF[istep],
+                ))
+end
+
 
 """
     get the elapsed time of 1 step
@@ -92,69 +128,44 @@ function power_step(stg::Storage, L, P, istep)
 end
 
 
-function write_to_log(k, istep, j, load, scaled_renewables)
-    if log_p
-        out1 = open(joinpath(@__DIR__, "log1.log"), "w")
-        out2 = open(joinpath(@__DIR__, "log2.log"), "w")
-
-    write(out1, @sprintf("%3d, %d, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e\n", 
-                istep, k, load, scaled_renewables,
-                storages[j].I2[i],
-                storages[j].I3[i],
-                storages[j].I4[i],
-                storages[j].I5[i],
-                storages[j].I6[i],
-                storages[j].I7[i],
-                storages[j].SF[i],
-                ))
-    write(out2, @sprintf("%3d, %d, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e, %8.2e\n", 
-                istep, k2, storages[j-1].I7[istep], storages[j-1].I5[istep],
-                storages[j].I2[istep],
-                storages[j].I3[istep],
-                storages[j].I4[istep],
-                storages[j].I5[istep],
-                storages[j].I6[istep],
-                storages[j].I7[istep],
-                storages[j].SF[istep],
-                ))
-        
 """
-    compute_storage_level(dates, Load, RP, punit, over_production, storage_capacity)
-
-    given Load, RP, over_production and storage_capacity compute storage level as a funtion of time
-
-    dates : times, ΔT = 1h
-    Load  : power consumed
-    RP    : renewable power production
-    punit : power unit of Load and RP (MW, GW, TW)
-    over_production  : renewable over production capacity factor, 1.0 is no over production capacity
-    storage_capacity : storage capacity
+    compute_storage_level(Load, WWSB, torage_capacity)
 """
-function compute_storage_level(load, scaled_renewables, storage_capacity, SF1_factor; log_p=false)
+function compute_storage_level(Load, WWSB, storage_capacity)
     nb_steps  = length(scaled_renewables)
     storage = Storage(storage_capacity, nb_steps)
-    storage.SF[1] = storage_capacity*SF1_factor
+    storage.SF[1] = storage_capacity
 
     for istep in 2:nb_steps
-        power_step(storage, load[istep], scaled_renewables[istep], istep)
+        power_step(storage, Load[istep], WWSB[istep], istep)
     end
     
     storage
 end
 
-using Optim
 
 """
     compute storage fill level for different combinations of storage_capacity and over_production
 """
-function compute_storage_fill_level(powers, storage_capacitiy, SF1_factor)
-    function f(op)
-        scaled_renewables = get_scaled_renewables(powers, op)
-        storage = compute_storage_level(powers.Load, scaled_renewables, storage_capacitiy, SF1_factor)
-        minimum(storage.SF)^2
+function optimize_overproduction(Load, WWSB, storage_capacitiy)
+
+    function compute_storage(Load, WWSB, op)
+        mean_load = mean(Load)
+        mean_wwsb = mean(WWSB)
+        scale = (mean_load*op) / mean_wwsb
+        WWSB_scaled =  WWSB .* scale
+        compute_storage_level(Load, WWSB_scaled, storage_capacitiy)
     end
+
+    function f(op)
+        storage = compute_storage(Load, WWSB, op)
+        storage_min = minimum(storage.SF)
+        (storage_min * (1.0 - 0.1))^2 + sum(storage.I7)
+    end
+
     op0 = [2.5]
     results = optimize(f, op0, NelderMead())
+    results.optimizer
 end
 
 """
@@ -166,51 +177,15 @@ end
     RP : detrended and scaled renewable power
     punit : unit of Load and RP (MW. GW, TW)
 """
-function determine_overproduction(dates::Vector{DateTime}, Load::Vector{Float64}, WWSB::Vector{Float64}, punit::String)
-    overproduction = collect(LinRange(1.05, 1.5, 20))
-    storage_capacities = []
-    for op in overproduction
-        stc1 = 1.0
-        stc2 = 1.0
-        minS = -1.0
-        it = 0
-        while minS < 0.0 && it < 50
-
-            storages, WWSB = compute_storage_level(Load, WWSB, storage_capacities, op::Float64, SF1_factor; log_p=false)
-
-            min_storage_level1 = minimum(storages[1].SF)
-            min_storage_level2 = minimum(storages[2].SF)
-
-            stc1 = stc1 - min_storage_level1
-            stc2 = stc2 - min_storage_level2
-            it += 1
-        end
-        push!(storage_capacities, (stc1, stc2))
+function determine_overproduction(Load::Vector{Float64}, WWSB::Vector{Float64}, storage_capacities)
+    ops = []
+    storage_capacitiy = storage_capacities[2]
+    for storage_capacitiy in storage_capacities
+        push!(ops, optimize_overproduction(Load, WWSB, storage_capacitiy))
     end
+    ops
 end
 
-"""
-    get_overproduction_scaled_renewables(powers, op)
-
-    powers : Load, Woff, Won, Solar, Bio
-    op : over production factor
-
-    R = Woff+Won+Solar
-    s = (<Load>*op - <Bio>) / <Woff+Won+Solar>
-
-    return (Woff+Won+Solar)/<Woff+Won+Solar> * (<Load>*op - <Bio>) + Bio
-"""
-function get_overproduction_scaled_renewables(powers, op)
-    renewables = powers.Woff .+ powers.Won .+ powers.Solar
-    mean_Load = mean(powers.Load)
-    mean_Bio = mean(powers.Bio)
-    mean_renewables = mean(renewables)
-
-    # mean_L*op = mean_R * scale + mean_B
-    scale = (mean_Load*op - mean_Bio) / mean_renewables
-
-    renewables .* scale .+ powers.Bio
-end
 
 """
     PoerParameter definded in energy_data/power_data.jl
@@ -255,38 +230,15 @@ function get_detrended_power(par::PowerParameter; load_from_arrow = false)
     detrended_power
 end
 
-"""
-    get_storage_capacities(par, storage_caps)
-
-    par - PowerParameter
-    storage_caps - storage capacity
-"""
-function get_storage_capacities(par, storage_caps)
-    storage_capacities = Vector{Vector{Float64}}(undef, 0)
-    for sc in storage_caps
-        # stc1 < stc2
-        stc1 = sc .* 0.01
-        stc2 = sc
-        if par.second_storage_p
-            push!(storage_capacities, [stc1, stc2])
-        else
-            push!(storage_capacities, [stc2])
-        end
-    end
-    storage_capacities
-end
-
-function get_storage_and_overproduction(par)
-    factor = uconversion_factor(par.punit, 1u_TW)
-    storage_capacities = [x*factor for x in [2.0, 3.0, 4.0, 8.0, 10.0]]
-    over_production = [2.0, 4.0, 5.0]
-    storage_capacities, over_production
-end
-
-function setup_simulation(start_year, end_year)
-
+function run_simulation(start_year, end_year)
     par = make_power_parameter(start_year, end_year)
-    detrended_power = get_detrended_power(par::PowerParameter; load_from_arrow = false)
-    storage_capacities, over_production = get_storage_and_overproduction(par)
+    detrended_power = get_detrended_power(par; load_from_arrow = false)
     
-    storages_v, WWSB_scaled = compute_storage_fill_level(detrended_power, storage_capacities, over_production, par.SF1_factor)
+    storage_capacities = collect(range(2.0, 6.0, 5))
+
+    Load = detrended_power.Load
+    WWSB = @. detrended_power.Woff + detrended_power.Won + detrended_power.Solar + detrended_power.Bio
+    determine_overproduction(Load, WWSB, storage_capacities)
+end
+
+start_year, end_year = 2017, 2024
