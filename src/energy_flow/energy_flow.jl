@@ -125,80 +125,44 @@ end
     L - Load
     P - power
 """
-function power_step(storage::EnergyFlow, Load, WWSB, istep)
+function power_step(energy_flow::EnergyFlow, Load, WWSB, istep)
     L = Load[istep]
     P = WWSB[istep]
 
-    ΔSC = storage.capacity - storage.fill_level[istep-1]
+    ΔSC = energy_flow.capacity - energy_flow.fill_level[istep-1]
     k = 0
     if P - L > 0.0
-        storage.toload[istep]      = L
-        storage.tostorecurt[istep] = P - L
-        storage.tostore[istep]     = min(storage.tostorecurt[istep], ΔSC/storage.ηin)
-        storage.fill_level[istep]  = storage.fill_level[istep-1] + storage.tostore[istep]*storage.ηin
-        storage.tocurtail[istep]   = max(0.0, storage.tostorecurt[istep]-storage.tostore[istep])  # curtailment
+        energy_flow.toload[istep]      = L
+        energy_flow.tostorecurt[istep] = P - L
+        energy_flow.tostore[istep]     = min(energy_flow.tostorecurt[istep], ΔSC/energy_flow.ηin)
+        energy_flow.fill_level[istep]  = energy_flow.fill_level[istep-1] + energy_flow.tostore[istep]*energy_flow.ηin
+        energy_flow.tocurtail[istep]   = max(0.0, energy_flow.tostorecurt[istep]-energy_flow.tostore[istep])  # curtailment
         k = 1
     else
-        storage.toload[istep]      = P
-        storage.fromstorage[istep] = min(storage.fill_level[istep-1] * storage.ηout, L - P)
-        storage.fill_level[istep]  = storage.fill_level[istep-1] - storage.fromstorage[istep]/storage.ηout
-        storage.other[istep]       = L - storage.toload[istep] - storage.fromstorage[istep]      # residual load
+        energy_flow.toload[istep]      = P
+        energy_flow.fromstorage[istep] = min(energy_flow.fill_level[istep-1] * energy_flow.ηout, L - P)
+        energy_flow.fill_level[istep]  = energy_flow.fill_level[istep-1] - energy_flow.fromstorage[istep]/energy_flow.ηout
+        energy_flow.other[istep]       = L - energy_flow.toload[istep] - energy_flow.fromstorage[istep]      # residual load
         k = 2
     end
     k
 end
 
-struct ScaledPower
-    Load :: Vector{Float64}
-    Woff :: Vector{Float64}
-    Won  :: Vector{Float64}
-    Solar:: Vector{Float64}
-    Bio  :: Vector{Float64}
-    WWSB :: Vector{Float64}
+"""
+    compute_energy_flow(Load, WWSB, torage_capacity)
+    Load = power.Load
+"""
+function compute_energy_flow(Load, WWSB_scaled, storage_capacity)
+    nb_steps  = length(WWSB_scaled)
+    energy_flow = EnergyFlow(storage_capacity, nb_steps)
+    energy_flow.fill_level[1] = storage_capacity
 
-    mean_Load  :: Float64
-    mean_Woff  :: Float64
-    mean_Won   :: Float64
-    mean_Solar :: Float64
-    mean_Bio   :: Float64
-    mean_WWS   :: Float64
-end
-
-function ScaledPower(Load, Woff, Won, Solar, Bio)
-    mean_Load = mean(Load)
-    mean_Woff = mean(Woff)
-    mean_Won  = mean(Won)
-    mean_Sol  = mean(Solar)
-    mean_Bio  = mean(Bio)
-    mean_WWS  = mean_Woff + mean_Won + mean_Sol
-    WWSB = @. Woff + Won + Solar + Bio
-    ScaledPower(Load, Woff, Won, Solar, Bio, WWSB, mean_Load, mean_Woff, mean_Won, mean_Sol, mean_Bio, mean_WWS)
-end
-
-function scale_wind_and_solar_by_load_4(power::ScaledPower, x)
-    WWS = @. power.Woff * x[2] + power.Won * x[3] + power.Solar * x[4]
-    scale = (power.mean_Load - power.mean_Bio) / mean(WWS) * x[1]
-    @. (power.Woff + power.Won + power.Solar) .* scale + Bio
-end
-
-function scale_wind_and_solar_by_load_1(power::ScaledPower, x)
-    scale = (power.mean_Load - power.mean_Bio) / power.mean_WWS * x[1]
-    @. (power.Woff + power.Won + power.Solar) .* scale + power.Bio
-end
-
-function scale_wind_and_solar_bio_by_load_0(power::ScaledPower, x)
-    mean_wwsb = mean(power.WWSB)
-    scale = (power.mean_Load * x[1]) / mean_wwsb
-    power.WWSB .* scale
-end
-
-function get_WWSB_scaled(power::ScaledPower, x, id)
-    WWSB = if id == 4
-        scale_wind_and_solar_by_load_4(power, x)
-    elseif id == 1
-        scale_wind_and_solar_by_load_1(power, x)
-    elseif id == 0
-        scale_wind_and_solar_bio_by_load_0(power, x)
+    istep = 2
+    while istep <= nb_steps
+        power_step(energy_flow, Load, WWSB_scaled, istep)        
+        istep += 1
     end
-    WWSB
+    
+    energy_flow
 end
+
