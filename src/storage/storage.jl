@@ -1,75 +1,73 @@
-include("base.jl")
+include("energy_flow.jl")
 
 """
-    compute_storage_level(Load, WWSB, torage_capacity)
+    compute_energy_flow(Load, WWSB, torage_capacity)
     Load = power.Load
 """
-function compute_storage_level(Load, WWSB_scaled, storage_capacity)
+function compute_energy_flow(Load, WWSB_scaled, storage_capacity)
     nb_steps  = length(WWSB_scaled)
-    storage = Storage(storage_capacity, nb_steps)
-    storage.fill_level[1] = storage_capacity
+    energy_flow = EnergyFlow(storage_capacity, nb_steps)
+    energy_flow.fill_level[1] = storage_capacity
 
     istep = 2
     while istep <= nb_steps
-        power_step(storage, Load, WWSB_scaled, istep)        
+        power_step(energy_flow, Load, WWSB_scaled, istep)        
         istep += 1
     end
     
-    storage
+    energy_flow
 end
 
 """
     compute storage fill level for different combinations of storage_capacity and over_production
 """
-function minimize_overproduction(power, storage_capacity; info = false)
+function minimize_overproduction(power, storage_capacity, info)
 
-    function cost(storage, storage_capacity)
-        storage_min = minimum(storage.fill_level)
-        a = (storage_min - storage_capacity*0.1)^2 + sum(storage.other)
-        storage_min, a
+    function compute_obj(energy_flow, storage_capacity)
+        storage_min = minimum(energy_flow.fill_level)
+        obj = (storage_min - storage_capacity*0.1)^2 + sum(energy_flow.other)
+        obj
     end
 
     function ff(x)
         Load = power.Load
         #WWSB_scaled_0 = get_WWSB_scaled(power, x[1], 0)
         WWSB_scaled_1 = get_WWSB_scaled(power, x, 1)
-        storage = compute_storage_level(Load, WWSB_scaled_1, storage_capacity)
-        storage_min, a = cost(storage, storage_capacity)
-        #@info x[1], storage_min, a 
-        a
+        energy_flow = compute_energy_flow(Load, WWSB_scaled_1, storage_capacity)
+        obj = compute_obj(energy_flow, storage_capacity)
+        obj
     end
-
-    #plt.plot(WWSB_scaled_0)
-    #plt.plot(WWSB_scaled2)
 
     x = [5.0]
     results = Optim.optimize(ff, x, NelderMead())
     
-#    op = Optim.minimizer(results)
-#    Load = power.Load
-#    WWSB_scaled = get_WWSB_scaled(power, op, 1)
-#    storage = compute_storage_level(Load, WWSB_scaled, storage_capacity)
-#    storage_min = minimum(storage.fill_level)
-#    if info
-#        a = (storage_min - storage_capacity*0.1)^2 + sum(storage.other)
-#        @info "      ", storage_capacity, a, Optim.minimizer(results), Optim.minimum(results)
-#    end
+    op = Optim.minimizer(results)
+    Load = power.Load
+    WWSB_scaled = get_WWSB_scaled(power, op, 1)
+    energy_flow = compute_energy_flow(Load, WWSB_scaled, storage_capacity)
+    
+    if info
+        storage_min = minimum(energy_flow.fill_level)
+        obj = (storage_min - storage_capacity*0.1)^2 + sum(energy_flow.other)
+        opmin = Optim.minimizer(results)
+        @info "      ", storage_capacity, opmin, obj, Optim.minimum(results)
+    end
 
-    Optim.minimizer(results), Optim.minimum(results)
+    Optim.minimizer(results), Optim.minimum(results), energy_flow
 end
 
-function minimize_cost(power::ScaledPower, storage_capacities; info = true)
+function minimize_cost(power::ScaledPower, storage_capacities, info)
 
-    function cost(op, storage_capacity)
+    function determine_cost(op, storage_capacity, energy_flow)
         (op + storage_capacity*1.0e-3)
     end
 
     function ff(x)
         storage_capacity = x[2]
-        (op, min_objective) = minimize_overproduction(power, storage_capacity; info = info)
-        a = cost(op[1], storage_capacity)
+        (op, min_objective, energy_flow) = minimize_overproduction(power, storage_capacity, info)
+        cost = determine_cost(op[1], storage_capacity, energy_flow)
         @info op[1], storage_capacity, min_objective, a
-        a
+        cost
     end
 
     x = [5.0, storage_capacities[3]]
@@ -87,11 +85,11 @@ end
     RP : detrended and scaled renewable power
     punit : unit of Load and RP (MW. GW, TW)
 """
-function determine_overproduction(power::ScaledPower, storage_capacities; info = true)
+function determine_overproduction(power::ScaledPower, storage_capacities, info)
     ops = []
     storage_capacity = storage_capacities[1]
     for storage_capacity in storage_capacities
-        push!(ops, minimize_overproduction(power, storage_capacity; info = info))
+        push!(ops, minimize_overproduction(power, storage_capacity, info))
     end
     ops
 end
@@ -115,15 +113,16 @@ function init_run(start_year, end_year)
 end
 
 function run_simulation(start_year=2017, end_year=2024)
+    start_year, end_year = 2017, 2024
+    info = true
     power, storage_capacities = init_run(start_year, end_year);
 
-    determine_overproduction(power, storage_capacities)
+    determine_overproduction(power, storage_capacities, info)
 
-    storage = compute_storage(power, storage_capacities[3], 3.0)
+    energy_flow = compute_storage(power, storage_capacities[3], 3.0)
     storage_min = extrema(storage.fill_level)[1]
 
-    plt.plot(storage.fill_level)
+    plt.plot(energy_flow.fill_level)
    
 end
 
-start_year, end_year = 2017, 2024

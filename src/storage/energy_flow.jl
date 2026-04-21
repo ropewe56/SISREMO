@@ -95,7 +95,7 @@ function make_power_parameter(start_year, end_year)
     par
 end
 
-mutable struct Storage
+mutable struct EnergyFlow
     ηin         :: Float64         # efficiency while charging
     ηout        :: Float64         # efficiency while discharging
     capacity    :: Float64         # storage capacity              [punit_h] TWh       SC
@@ -108,7 +108,7 @@ mutable struct Storage
     other       :: Vector{Float64} # other sources to load         [punit] TW, GW, MW  I7
 end
 
-function Storage(capacity::Float64, nb_steps::Int64; ηin = 1.0, ηout = 1.0)
+function EnergyFlow(capacity::Float64, nb_steps::Int64; ηin = 1.0, ηout = 1.0)
     fill_level  = zeros(Float64, nb_steps)
     toload      = zeros(Float64, nb_steps)
     tostorecurt = zeros(Float64, nb_steps)
@@ -116,16 +116,16 @@ function Storage(capacity::Float64, nb_steps::Int64; ηin = 1.0, ηout = 1.0)
     tocurtail   = zeros(Float64, nb_steps)
     fromstorage = zeros(Float64, nb_steps)
     other       = zeros(Float64, nb_steps)
-    Storage(ηin, ηout, capacity, fill_level, toload, tostorecurt, tostore, tocurtail, fromstorage, other)
+    EnergyFlow(ηin, ηout, capacity, fill_level, toload, tostorecurt, tostore, tocurtail, fromstorage, other)
 end
 
 """
-    power_step(stg::Storage, L, P, i)
+    power_step(stg::EnergyFlow, L, P, i)
 
     L - Load
     P - power
 """
-function power_step(storage::Storage, Load, WWSB, istep)
+function power_step(storage::EnergyFlow, Load, WWSB, istep)
     L = Load[istep]
     P = WWSB[istep]
 

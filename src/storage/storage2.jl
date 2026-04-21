@@ -1,5 +1,4 @@
-include("base.jl")
-
+include("energy_flow.jl")
 
 """
     compute_storage_level(Load, WWSB, torage_capacity)
