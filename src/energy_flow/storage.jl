@@ -2,7 +2,6 @@ include("energy_flow.jl")
 include("powers.jl")
 include("costs.jl")
 
-
 """
     compute storage fill level for different combinations of storage_capacity and over_production
 """
